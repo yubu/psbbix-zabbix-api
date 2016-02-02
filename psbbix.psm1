@@ -174,9 +174,11 @@ Function Get-ZabbixVersion {
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
-	
+    
 	if (!($global:zabsession -or $global:zabSessionParams)) {write-host "`nDisconnected from Zabbix Server!`n" -f red; return}
 	if ($global:zabsession -and $global:zabSessionParams) {
+    if (!$psboundparameters.count) {Get-ZabbixVersion @zabSessionParams; return}
+
 		$Body = @{
 			method = "apiinfo.version"
 			jsonrpc = $jsonrpc
@@ -1445,6 +1447,9 @@ Function Get-ZabbixTrigger {
 	.Parameter TriggerID
 		To filter by ID of the trigger
 	.Example
+        Get-ZabbixTrigger @zabSessionParams | ? status -eq 0 | ? expression -match fs.size | select status,description,expression | sort description
+        Get enabled triggers
+	.Example
 		Get-ZabbixTemplate @zabSessionParams | ? name -match "TemplateName" | Get-ZabbixTrigger @zabSessionParams | select description,expression
 		Get triggers from template
 	.Example
@@ -1453,7 +1458,7 @@ Function Get-ZabbixTrigger {
 	.Example
 		Get-ZabbixTrigger @zabSessionParams -ExpandDescription -ExpandExpression | ? description -match "Template" | select description,expression
 		Get triggers where description match the string (-ExpandDescription and -ExpandExpression will show full text instead of ID only)
-	.Example 
+    .Example 
 		Get-ZabbixTrigger @zabSessionParams -TemplateID (Get-ZabbixTemplate @zabSessionParams | ? name -match "Template").templateid | select description,expression
 		Get list of triggers from templates
 	.Example

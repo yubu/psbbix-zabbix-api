@@ -738,6 +738,9 @@ Function Get-ZabbixMaintenance {
 		Get-ZabbixMaintenance @zabSessionParams -MaintenanceID 10123
 		Get maintenance by ID
 	.Example
+        Get-ZabbixMaintenance @zabSessionParams | select maintenanceid,name,@{n="Active_since(UTC-5)";e={(convertFrom-epoch $_.active_since).addhours(-5)}},@{n="Active_till(UTC-5)";e={(convertFrom-epoch $_.active_till).addhours(-5)}},@{n="TimeperiodStart(UTC-5)";e={(convertfrom-epoch $_.timeperiods.start_date).addhours(-5)}},@{n="Duration(hours)";e={$_.timeperiods.period/3600}} | ft -a
+        Get maintenance and it's timeperiod
+	.Example
 		(Get-ZabbixMaintenance @zabSessionParams -MaintenanceName MaintenanceName).timeperiods
 		Get timeperiods from maintenance (case sensitive)
     .Example

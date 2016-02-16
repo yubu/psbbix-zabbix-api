@@ -2609,9 +2609,9 @@ Function Save-ZabbixGraph {
 		[switch]$show,
         [switch]$mail,
         [string]$SMTPServer,
-        [string]$to,
+        [string[]]$to,
         [string]$from,
-        [string]$subject="Zabbix: graphid: ",
+        [string]$subject,
         [string]$priority,
         [string]$body
 	)
@@ -2634,7 +2634,8 @@ Function Save-ZabbixGraph {
 	}
 	
 	if ($mail) {
-        $subject+="$GraphID"
+        if (!$from) {$from="zabbix@mydomain.com"}
+        if (!$subject) {$subject="Zabbix: graphid: $GraphID"}
 	    if ($body) {Send-MailMessage -from $from -to $to -subject $subject -body $body -Attachments $fileFullPath -SmtpServer $SMTPServer}
         else {Send-MailMessage -from $from -to $to -subject $subject -Attachments $fileFullPath -SmtpServer $SMTPServer}
 	}

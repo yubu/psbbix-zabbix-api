@@ -7,7 +7,7 @@ Function New-ZabbixSession {
 		Create new Zabbix session
 	.Parameter PSCredential
 		Credential
-	.Parameter IPAdress
+	.Parameter IPAddress
 		Accept IP adress or domain name
 	.Parameter noSSL
 		Connect to Zabbix server with plain http
@@ -15,17 +15,17 @@ Function New-ZabbixSession {
 		New-ZabbixSession 10.10.10.10
 		Connect to Zabbix server
 	.Example
-		Connect-Zabbix -IPAdress 10.10.10.10 -noSSL
+		Connect-Zabbix -IPAddress 10.10.10.10 -noSSL
 		Connect to Zabbix server with noSSL (http)
 	.Example
-		Connect-Zabbix -User admin -Password zabbix -IPAdress zabbix.domain.net
+		Connect-Zabbix -User admin -Password zabbix -IPAddress zabbix.domain.net
 		Connect to Zabbix server
 	#>
     
 	[CmdletBinding()]
     [Alias("Connect-Zabbix")]
 	Param (
-        [Parameter(Mandatory=$True)][string]$IPAdress,
+        [Parameter(Mandatory=$True)][string]$IPAddress,
         [Parameter(Mandatory=$True)][PSCredential]$PSCredential,
         [Switch]$UseSSL,
 		[switch]$noSSL
@@ -45,6 +45,8 @@ Function New-ZabbixSession {
     $BodyJSON = ConvertTo-Json $Body
 	write-verbose $BodyJSON
 	
+    if (!(test-connection $IPAddress -Quiet -Count 1)) {write-host "$IPAddress is not available.`n" -f red; return}
+    
 	if ($noSSL) {
 		write-warning "You're going to connect via insecure HTTP protocol. Consider to use HTTPS."
 		$Protocol="http"
@@ -56,7 +58,7 @@ Function New-ZabbixSession {
 		$Protocol="https"
 	}
 	
-    $URL = $Protocol+"://$IPAdress/zabbix"
+    $URL = $Protocol+"://$IPAddress/zabbix"
     try {if (!$global:zabSession) {
 		$global:zabSession=Invoke-RestMethod ("$URL/api_jsonrpc.php") -ContentType "application/json" -Body $BodyJSON -Method Post |
 			Select-Object jsonrpc,@{Name="session";Expression={$_.Result}},id,@{Name="URL";Expression={$URL}}
@@ -74,7 +76,7 @@ Function New-ZabbixSession {
 	
     if ($zabsession.session) {
 		$global:zabSessionParams=@{jsonrpc=$zabsession.jsonrpc;session=$zabsession.session;id=$zabsession.id;url=$zabsession.URL}
-		write-host "`nConnected to $IPAdress." -f green
+		write-host "`nConnected to $IPAddress." -f green
         write-host "Zabbix Server version: " -f green -nonewline
         Get-ZabbixVersion @zabSessionParams
         ""

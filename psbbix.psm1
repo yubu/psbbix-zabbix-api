@@ -184,6 +184,7 @@ Function Get-ZabbixVersion {
 		$Body = @{
 			method = "apiinfo.version"
 			jsonrpc = $jsonrpc
+			params =  @{}
 			id = $id
 		}
 		

@@ -1,3 +1,187 @@
+
+
+# http://stackoverflow.com/questions/3919798/how-to-check-if-a-cmdlet-exists-in-powershell-at-runtime-via-script
+function Test-Command($cmdname)
+{
+    return [bool](Get-Command -Name $cmdname -ErrorAction SilentlyContinue)
+}
+
+# http://stackoverflow.com/questions/28077854/powershell-2-0-convertfrom-json-and-convertto-json-implementation
+# https://d-fens.ch/2014/09/20/using-typeful-json-deserialisation-and-validation-in-powershell/
+
+function ConvertTo-Json20([object] $item, $Depth ){
+    if (Test-Command -cmdname "ConvertTo-Json") {
+        if ($Depth -ne $null)  {
+            return ConvertTo-Json $item -Depth $Depth
+        } else {
+            return ConvertTo-Json $item
+        }
+    } else {
+        add-type -assembly system.web.extensions
+        $ps_js=new-object system.web.script.serialization.javascriptSerializer
+        $ps_js.MaxJsonLength = [System.Int32]::MaxValue
+        if ($Depth -ne $null)  {
+            $ps_js.RecursionLimit = $Depth
+        } else {
+            $ps_js.RecursionLimit = 99
+        }
+        return $ps_js.Serialize($item)
+    }
+}
+
+
+function ParseItem($jsonItem) 
+{
+    if($jsonItem.PSObject.TypeNames -match 'Array') 
+    {
+        return ParseJsonArray($jsonItem)
+    }
+    elseif($jsonItem.PSObject.TypeNames -match 'Dictionary') 
+    {
+        return ParseJsonObject([HashTable]$jsonItem)
+    }
+    else 
+    {
+        return $jsonItem
+    }
+}
+
+function ParseJsonObject($jsonObj) 
+{
+    $result = New-Object -TypeName PSCustomObject
+    foreach ($key in $jsonObj.Keys) 
+    {
+        $item = $jsonObj[$key]
+        if ($item) 
+        {
+            $parsedItem = ParseItem $item
+        }
+        else 
+        {
+            $parsedItem = $null
+        }
+        $result | Add-Member -MemberType NoteProperty -Name $key -Value $parsedItem
+    }
+    return $result
+}
+
+function ParseJsonArray($jsonArray) 
+{
+    $result = @()
+    $jsonArray | ForEach-Object -Process {
+        $result += , (ParseItem $_)
+    }
+    return $result
+}
+
+function ParseJsonString($json) 
+{
+    $config = $javaScriptSerializer.DeserializeObject($json)
+    return ParseJsonObject($config)
+}
+
+
+
+
+# http://wahlnetwork.com/2016/03/15/deserializing-large-json-payloads-powershell-objects/
+# https://gist.github.com/chriswahl/7982951b84a02ce91d55#file-convertfrom-json2-ps1
+function ConvertFrom-Json20([object] $item){ 
+
+     if (Test-Command -cmdname "ConvertFrom-Json") {        
+         return ConvertFrom-Json($item)        
+     } else {
+
+        add-type -assembly system.web.extensions
+
+
+        $result = ParseItem ((New-Object -TypeName System.Web.Script.Serialization.JavaScriptSerializer -Property @{MaxJsonLength=67108864}).DeserializeObject($item))
+        return $result
+
+        #$ps_js=new-object system.web.script.serialization.javascriptSerializer
+
+        #The comma operator is the array construction operator in PowerShell
+        #return ,$ps_js.DeserializeObject($item)
+    }
+}
+
+
+
+# https://blogs.technet.microsoft.com/heyscriptingguy/2013/10/21/invokerestmethod-for-the-rest-of-us/
+# http://stackoverflow.com/questions/22921529/powershell-webrequest-post
+# http://stackoverflow.com/questions/3535218/how-to-correctly-send-json-data-via-net-webrequest-powershell
+
+function Invoke-Restmethod20 {
+
+	[CmdletBinding()]    
+	Param (
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$Uri,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Method = "Get",
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Body,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$ContentType = "text/plain"        
+    )
+  
+   if (Test-Command -cmdname "Invoke-RestMethod2")  {
+     return Invoke-RestMethod -Uri $Uri -Method $Method -Body $Body -ContentType $ContentType
+   } else {
+
+        $request = [System.Net.WebRequest]::Create($Uri)
+        $request.Method=$Method
+        $request.ContentType = $ContentType
+        if ($Method -eq 'POST') {
+            
+            $bytes = [System.Text.Encoding]::ASCII.GetBytes($Body)
+            $request.ContentLength = $bytes.Length
+            
+            
+            $requestStream = [System.IO.Stream]$request.GetRequestStream()
+            $requestStream.write($bytes, 0, $bytes.Length)
+            $requestStream.Close()
+        }
+              
+
+        $response = $request.GetResponse()
+
+        $requestStream = $response.GetResponseStream()
+        $readStream = New-Object System.IO.StreamReader $requestStream
+        $data=$readStream.ReadToEnd()
+
+        Write-Verbose $data
+        Write-Debug "Its old code!"
+    
+        if($response.ContentType -match “application/xml”) {
+
+            Write-Debug "Returning xml"
+            $results = $data
+
+        } elseif($response.ContentType -match “application/json”) {
+            Write-Debug "Returning JSON"
+            $results = ConvertFrom-Json20($data)
+
+        } else {
+
+            try {
+
+                Write-Debug "Returning Data"
+                $results = $data
+
+            } catch {
+
+                Write-Debug "Returning JSON"
+                $results = ConvertFrom-Json20($data)
+
+            }
+
+        }
+
+        return $results
+
+   }
+    
+
+
+}
+
+
 Function New-ZabbixSession {
 	
 	<# 
@@ -26,7 +210,7 @@ Function New-ZabbixSession {
     [Alias("Connect-Zabbix")]
 	Param (
         [Parameter(Mandatory=$True)][string]$IPAddress,
-        [Parameter(Mandatory=$True)][PSCredential]$PSCredential,
+        [Parameter(Mandatory=$True)][System.Management.Automation.PSCredential]$PSCredential,
         [Switch]$UseSSL,
 		[switch]$noSSL
     )
@@ -42,7 +226,7 @@ Function New-ZabbixSession {
 	    auth = $null
     }
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
     if (!(test-connection $IPAddress -Quiet -Count 1)) {write-host "$IPAddress is not available.`n" -f red; return}
@@ -60,7 +244,7 @@ Function New-ZabbixSession {
 	
     $URL = $Protocol+"://$IPAddress/zabbix"
     try {if (!$global:zabSession) {
-		$global:zabSession=Invoke-RestMethod ("$URL/api_jsonrpc.php") -ContentType "application/json" -Body $BodyJSON -Method Post |
+		$global:zabSession=Invoke-RestMethod20 ("$URL/api_jsonrpc.php") -ContentType "application/json" -Body $BodyJSON -Method Post |
 			Select-Object jsonrpc,@{Name="session";Expression={$_.Result}},id,@{Name="URL";Expression={$URL}}
 	   }
     }
@@ -70,7 +254,7 @@ Function New-ZabbixSession {
     } 
     finally {
         [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
-        $global:zabSession=Invoke-RestMethod ("$URL/api_jsonrpc.php") -ContentType "application/json" -Body $BodyJSON -Method Post |
+        $global:zabSession=Invoke-RestMethod20 ("$URL/api_jsonrpc.php") -ContentType "application/json" -Body $BodyJSON -Method Post |
 			Select-Object jsonrpc,@{Name="session";Expression={$_.Result}},id,@{Name="URL";Expression={$URL}}
     }	
 	
@@ -144,10 +328,10 @@ Function Remove-ZabbixSession {
 			auth = $session
 		}
 		
-		$BodyJSON = ConvertTo-Json $Body
+		$BodyJSON = ConvertTo-Json20 $Body
 		write-verbose $BodyJSON
 		
-		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		$a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
 		if ($a.result) {$a.result | out-null} else {$a.error}
 		
 		$global:zabSession = ""
@@ -188,10 +372,10 @@ Function Get-ZabbixVersion {
 			id = $id
 		}
 		
-		$BodyJSON = ConvertTo-Json $Body
+		$BodyJSON = ConvertTo-Json20 $Body
 		write-verbose $BodyJSON
 		
-		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		$a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
 		if ($a.result) {return $a.result} else {$a.error}
 	}
 }
@@ -288,7 +472,9 @@ Function Get-ZabbixHost {
             )
             selectInterfaces = @(
 				"interfaceid",
+                "useip",
 				"ip",
+                "dns",
 				"port"
             )
 			selectHttpTests = @(
@@ -314,11 +500,11 @@ Function Get-ZabbixHost {
 	    auth = $session
     }
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
     try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+        $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
         if ($a.result) {$a.result} else {$a.error}
     } catch {
         Write-Host "$_"
@@ -476,10 +662,10 @@ Function New-ZabbixHost {
 			id = $id
 		}
 	}
-    $BodyJSON = ConvertTo-Json $Body -Depth 3
+    $BodyJSON = ConvertTo-Json20 $Body -Depth 3
     write-verbose $BodyJSON
 	
-	$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+	$a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
 	if ($a.result) {$a.result} else {$a.error}
 }
 
@@ -588,10 +774,10 @@ Function Set-ZabbixHost {
 	
 	}
 	
-    $BodyJSON = ConvertTo-Json $Body -Depth 3
+    $BodyJSON = ConvertTo-Json20 $Body -Depth 3
 	write-verbose $BodyJSON
 	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+    $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
     if ($a.result) {$a.result} else {$a.error}
 }
 
@@ -626,7 +812,7 @@ Function Remove-ZabbixHost {
 		Delete multiple hosts 
 	#>
 	
-    [CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
+    [CmdletBinding(SupportsShouldProcess=$true,ConfirmImpact='High')]
 	Param (
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][array]$HostID,
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
@@ -643,13 +829,13 @@ Function Remove-ZabbixHost {
 	    auth = $session
     }
 	
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
     
 	if ([bool]$WhatIfPreference.IsPresent) {
 	}
 	if ($PSCmdlet.ShouldProcess($HostID,"Delete")){  
-		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		$a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
 	}
 	
 	if ($a.result) {$a.result} else {$a.error}
@@ -708,10 +894,10 @@ Function Get-ZabbixTemplate {
 	    auth = $session
     }
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+    $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
 	if ($a.result) {$a.result} else {$a.error}
 }
 
@@ -790,11 +976,11 @@ Function Get-ZabbixMaintenance {
 		auth = $session
     }
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
     try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+        $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
         if ($a.result) {$a.result} else {$a.error}
     } catch {
         Write-Host "$_"
@@ -919,10 +1105,10 @@ Function New-ZabbixMaintenance {
 		}
 	}
     
-	$BodyJSON = ConvertTo-Json $Body -Depth 4
+	$BodyJSON = ConvertTo-Json20 $Body -Depth 4
 	write-verbose $BodyJSON
     
-	$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+	$a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
     if ($a.result) {$a.result} else {$a.error}
  }
 
@@ -948,7 +1134,7 @@ Function Remove-ZabbixMaintenance {
 		Remove single maintenance by name
 	#>
     
-	[CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
+	[CmdletBinding(SupportsShouldProcess=$true,ConfirmImpact='High')]
 	Param (
         [Parameter(ValueFromPipelineByPropertyName=$true)][array]$MaintenanceID,
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
@@ -964,14 +1150,14 @@ Function Remove-ZabbixMaintenance {
 	    auth = $session
     }
 	
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
     
 	if ([bool]$WhatIfPreference.IsPresent) {
 	}
 	if ($PSCmdlet.ShouldProcess($HostID,"Delete")){  
-		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		$a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
 	}
 	
 	if ($a.result) {$a.result} else {$a.error}
@@ -1032,10 +1218,10 @@ Function Export-ZabbixConfig {
 		auth = $session
 		}
 
-    $BodyJSON = ConvertTo-Json $Body -Depth 3
+    $BodyJSON = ConvertTo-Json20 $Body -Depth 3
 	write-verbose $BodyJSON
 	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+    $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
     if ($a.result) {$a.result} else {$a.error}
 }
 
@@ -1114,11 +1300,11 @@ Function Get-ZabbixAlert {
 	    auth = $session
     }
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
     try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+        $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
         if ($a.result) {$a.result} else {$a.error}
     } catch {
         Write-Host "$_"
@@ -1171,11 +1357,11 @@ Function Get-ZabbixUser {
 	    auth = $session
     }
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
     try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+        $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
         if ($a.result) {$a.result} else {$a.error}
     } catch {
         Write-Host "$_"
@@ -1197,7 +1383,7 @@ Function Remove-ZabbixUser {
 		Delete multiple users by alias match
 	#>
 	
-	[cmdletbinding(SupportsShouldProcess,ConfirmImpact='High')]
+	[cmdletbinding(SupportsShouldProcess=$true,ConfirmImpact='High')]
 	Param (
 		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][array]$UserID,
 		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
@@ -1214,13 +1400,13 @@ Function Remove-ZabbixUser {
 	    auth = $session
     }
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
 	if ([bool]$WhatIfPreference.IsPresent) {
 	}
 	if ($PSCmdlet.ShouldProcess($UserID,"Delete")){  
-		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		$a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
 	}
 	
     if ($a.result) {$a.result} else {$a.error}
@@ -1279,10 +1465,10 @@ Function Set-ZabbixUser {
 	}
 	
 	
-    $BodyJSON = ConvertTo-Json $Body -Depth 3
+    $BodyJSON = ConvertTo-Json20 $Body -Depth 3
 	write-verbose $BodyJSON
 	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+    $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
     if ($a.result) {$a.result} else {$a.error}
 }
 
@@ -1382,10 +1568,10 @@ Function New-ZabbixUser {
 		}
 	}
 
-    $BodyJSON = ConvertTo-Json $Body -Depth 3
+    $BodyJSON = ConvertTo-Json20 $Body -Depth 3
 	write-verbose $BodyJSON
 	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+    $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
     if ($a.result) {$a.result} else {$a.error}
 }
 
@@ -1432,11 +1618,11 @@ Function Get-ZabbixUserGroup {
 	    auth = $session
     }
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
     try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+        $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
         if ($a.result) {$a.result} else {$a.error}
     } catch {
         Write-Host "$_"
@@ -1505,11 +1691,11 @@ Function Get-ZabbixTrigger {
 		auth = $session
 	}
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
     write-verbose $BodyJSON
 	
 	try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+        $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
         if ($a.result) {$a.result} else {$a.error}
     } catch {
         Write-Host "$_"
@@ -1559,10 +1745,10 @@ Function Set-ZabbixTrigger {
 	}
 	
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
     write-host $BodyJSON
 	
-	$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+	$a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
     if ($a.result) {$a.result} else {$a.error}
 }
 
@@ -1602,11 +1788,11 @@ Function Get-ZabbixAction {
 	    auth = $session
     }
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
     try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+        $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
         if ($a.result) {$a.result} else {$a.error}
     } catch {
         Write-Host "$_"
@@ -1648,10 +1834,10 @@ Function Set-ZabbixAction {
 	    auth = $session
     }
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+    $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
     if ($a.result) {$a.result} else {$a.error}
 }
 
@@ -1714,11 +1900,11 @@ Function Get-ZabbixApplication {
 	    auth = $session
     }
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
     try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+        $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
         if ($a.result) {$a.result} else {$a.error}
     } catch {
         Write-Host "$_"
@@ -1766,11 +1952,11 @@ Function Get-ZabbixHostInterface {
 	    auth = $session
     }
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
     try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+        $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
         if ($a.result) {$a.result} else {$a.error}
     } catch {
         Write-Host "$_"
@@ -1814,10 +2000,10 @@ Function Set-ZabbixHostInterface {
 	    auth = $session
     }
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+    $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
     if ($a.result) {$a.result} else {$a.error}
 }
 
@@ -1939,11 +2125,11 @@ Function Get-ZabbixHttpTest {
 		}
 	}
 	
-	$BodyJSON = ConvertTo-Json $Body
+	$BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
     try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+        $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
         if ($a.result) {$a.result} else {$a.error}
     } catch {
         Write-Host "$_"
@@ -2030,10 +2216,10 @@ Function New-ZabbixHttpTest {
 			auth = $session
 		}
 	}
-    $BodyJSON = ConvertTo-Json $Body -Depth 3
+    $BodyJSON = ConvertTo-Json20 $Body -Depth 3
 	write-verbose $BodyJSON
 	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+    $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
     if ($a.result) {$a.result} else {$a.error}
 }
 
@@ -2116,10 +2302,10 @@ Function Set-ZabbixHttpTest {
 		}
 	}
 
-    $BodyJSON = ConvertTo-Json $Body -Depth 3
+    $BodyJSON = ConvertTo-Json20 $Body -Depth 3
 	write-verbose $BodyJSON
 	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+    $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
     if ($a.result) {$a.result} else {$a.error}
 }
 
@@ -2139,7 +2325,7 @@ Function Remove-ZabbixHttpTest {
 		Delete web/http tests 
 	#>
 
-	[CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
+	[CmdletBinding(SupportsShouldProcess=$true,ConfirmImpact='High')]
     Param (
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][array]$HttpTestID,
 		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
@@ -2156,14 +2342,14 @@ Function Remove-ZabbixHttpTest {
 		auth = $session
 	}
 
-    $BodyJSON = ConvertTo-Json $Body -Depth 3
+    $BodyJSON = ConvertTo-Json20 $Body -Depth 3
 	write-verbose $BodyJSON
 	
     if ([bool]$WhatIfPreference.IsPresent) {
 		##
 	}
 	if ($PSCmdlet.ShouldProcess($HostID,"Delete")){  
-		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		$a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
 	}
 	
 	if ($a.result) {$a.result} else {$a.error}
@@ -2218,11 +2404,11 @@ Function Get-ZabbixHostInterface {
 	    auth = $session
     }
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
     try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+        $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
         if ($a.result) {$a.result} else {$a.error}
     } catch {
         Write-Host "$_"
@@ -2273,10 +2459,10 @@ Function Set-ZabbixHostInterface {
 	    auth = $session
     }
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+    $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
     if ($a.result) {$a.result} else {$a.error}
 }
 
@@ -2337,10 +2523,10 @@ Function New-ZabbixHostInterface {
 	    auth = $session
     }
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+    $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
     if ($a.result) {$a.result} else {$a.error}
 }
 
@@ -2359,7 +2545,7 @@ Function Remove-ZabbixHostInterface {
 	.Example	
 
 	#>
-	[CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
+	[CmdletBinding(SupportsShouldProcess=$true,ConfirmImpact='High')]
 	Param (
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$HostID,
 		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][array]$InterfaceId,
@@ -2378,14 +2564,14 @@ Function Remove-ZabbixHostInterface {
 	    auth = $session
     }
 	
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
 	if ([bool]$WhatIfPreference.IsPresent) {
-		#$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		#$a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
 	}
 	if ($PSCmdlet.ShouldProcess($HostID,"Delete")){  
-		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		$a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
 	}
 	
     if ($a.result) {$a.result} else {$a.error}
@@ -2489,11 +2675,11 @@ Function Get-ZabbixItem {
 	    auth = $session
     }
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
     try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+        $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
         if ($a.result) {$a.result} else {$a.error}
     } catch {
         Write-Host "$_"
@@ -2563,11 +2749,11 @@ Function Get-ZabbixGraph {
 	    auth = $session
     }
 
-    $BodyJSON = ConvertTo-Json $Body
+    $BodyJSON = ConvertTo-Json20 $Body
 	write-verbose $BodyJSON
 	
     try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+        $a = Invoke-RestMethod20 "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
         if ($a.result) {$a.result} else {$a.error}
     } catch {
         Write-Host "$_"
@@ -2643,3 +2829,77 @@ Function Save-ZabbixGraph {
         else {Send-MailMessage -from $from -to $to -subject $subject -Attachments $fileFullPath -SmtpServer $SMTPServer}
 	}
 }
+
+# SIG # Begin signature block
+# MIINNwYJKoZIhvcNAQcCoIINKDCCDSQCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUbmz2GYQJTOio0YyDqMHPTLlU
+# GRagggqTMIIFFzCCA/+gAwIBAgITLQAAAvZBJVsiSnHa3wAAAAAC9jANBgkqhkiG
+# 9w0BAQsFADBWMRQwEgYKCZImiZPyLGQBGRYEc2lzZTEZMBcGCgmSJomT8ixkARkW
+# CW50c2VydmVyMjEjMCEGA1UEAxMaQVMgVGFsbGlubmEgVmVzaSBPbmxpbmUgQ0Ew
+# HhcNMTYwMzE0MTIzMDQyWhcNMjEwMzEzMTIzMDQyWjBxMRQwEgYKCZImiZPyLGQB
+# GRYEc2lzZTEZMBcGCgmSJomT8ixkARkWCW50c2VydmVyMjEOMAwGA1UECxMFVFZF
+# U0kxFzAVBgNVBAsTDkFkbWluaXN0cmF0b3JzMRUwEwYDVQQDEwxBRE0gU2lpbSBB
+# dXMwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC7JxaBQP70kdl9wu5K
+# FTIxSVMFXYauJy/jWXKARXTC3ntzHvz1tFIhySL0+8XedvlcXKEtlscLokMiqbfE
+# 2U6EMi5WrDnwQDk+PjEw7szlBWMBrwwwnYrHveZyFuMLQWHDmfMvCmXip76+Gdm0
+# XFt0Tl37BmhDd9SMIcGbtecrgzxMXMJBqTYMkXyvSdzH+WAQQyxiSrogji+RpUeE
+# AeWuilclec6suByym38mQa79Qw8wPD8qaw237gpkmqF9Jb5L84eU8pUnceANtDsF
+# y+TyBRYRjOXNOLp59+vKMWGiU4gkWuTx5wojDz8bt/IsCtXH9tKeS8y1nya8t35W
+# IsPhAgMBAAGjggHBMIIBvTA9BgkrBgEEAYI3FQcEMDAuBiYrBgEEAYI3FQiG6ac7
+# gsXLWPGRAoO5u3qDg6dAgW2GycdThPeUPwIBZAIBAzATBgNVHSUEDDAKBggrBgEF
+# BQcDAzAOBgNVHQ8BAf8EBAMCB4AwGwYJKwYBBAGCNxUKBA4wDDAKBggrBgEFBQcD
+# AzAdBgNVHQ4EFgQU6U4LGEbZy0iN05WqXEQsROBbC/swHwYDVR0jBBgwFoAUEWar
+# MjEMiM2zLWYVrFQgFOCyF1EwVAYDVR0fBE0wSzBJoEegRYZDaHR0cDovL2NhLm50
+# c2VydmVyMi5zaXNlL3BraS9BUyUyMFRhbGxpbm5hJTIwVmVzaSUyME9ubGluZSUy
+# MENBLmNybDB3BggrBgEFBQcBAQRrMGkwZwYIKwYBBQUHMAKGW2h0dHA6Ly9jYS5u
+# dHNlcnZlcjIuc2lzZS9wa2kvTG9naXN0aWMubnRzZXJ2ZXIyLnNpc2VfQVMlMjBU
+# YWxsaW5uYSUyMFZlc2klMjBPbmxpbmUlMjBDQS5jcnQwKwYDVR0RBCQwIqAgBgor
+# BgEEAYI3FAIDoBIMEGFkbXNpaW1AdHZlc2kuZWUwDQYJKoZIhvcNAQELBQADggEB
+# AEuBQyWG2nOI4gT6JhUl3l/kWEOlP73xD9wGA2zzYnToqQSh031FWDJmRhf5nJOL
+# yRerw9pyMicovBvgYraEw+duJTGPbZT20gjO3v6iBwZUyjUd6qN3Ec3lQuSAFq9f
+# N6HkzTlb3jK4e71eKneqDqmbkOjFZdT1MT82moTUNvrG0s9Fo2i3qB9BrOedIjDH
+# HkUDbo9v+Onz1oBA03YlV45E0Z3jGhjAf6kOMXMbNAXKfPmZ/8jtTOeHPHQHhHtZ
+# B0U4tHdoyXD2MwsLrOu963kTV//A4MrtB0ZZZNAPlvm7Q4bXxc6WEiMGwjSRTfek
+# iHA0sVJzK9NCrRgg3KPX88QwggV0MIIDXKADAgECAhM+AAAAAl0Bz4yIla0tAAAA
+# AAACMA0GCSqGSIb3DQEBDQUAMCMxITAfBgNVBAMTGEFTIFRhbGxpbm5hIFZlc2kg
+# Um9vdCBDQTAeFw0xNTA5MDExNTIwMzNaFw0yNTA5MDExNTMwMzNaMFYxFDASBgoJ
+# kiaJk/IsZAEZFgRzaXNlMRkwFwYKCZImiZPyLGQBGRYJbnRzZXJ2ZXIyMSMwIQYD
+# VQQDExpBUyBUYWxsaW5uYSBWZXNpIE9ubGluZSBDQTCCASIwDQYJKoZIhvcNAQEB
+# BQADggEPADCCAQoCggEBAK7G17xMJSMfMHWGQtHe7x+kAzg9aWRF1AQ6BSDr3aoQ
+# oCjd/u67VLbRFVQBi76bOxvzD/1A4BJUBsgoEsC+FXIaEwsbazt8UtS7/S7FL2b3
+# uI3a7DYgqRGX+2xqZDOioPM9JE3NND5Vq5heZlhixn4LfneAlEATwjaLUsaEUaDW
+# rsV90panoC9ErKhdvSf4D8/rQWjCiutIDEh44Qy6/yslUUQ/U+wLsV21FPjXF5Lj
+# /fzTuWoHfK6kGDeik1mSzuMU4cGc7Ndn1fNWoCXJofj5MkXmO7T8Z6pt0TuemGTq
+# 24eF9iBtT1vZ993h6ko3gLWhc064PRb4WiuUovA9F9kCAwEAAaOCAWwwggFoMBAG
+# CSsGAQQBgjcVAQQDAgEAMB0GA1UdDgQWBBQRZqsyMQyIzbMtZhWsVCAU4LIXUTCB
+# hgYDVR0gBH8wfTB7BggqAwSLL0NZBTBvMDoGCCsGAQUFBwICMC4eLABMAGUAZwBh
+# AGwAIABQAG8AbABpAGMAeQAgAFMAdABhAHQAZQBtAGUAbgB0MDEGCCsGAQUFBwIB
+# FiVodHRwOi8vQ0EubnRzZXJ2ZXIyLnNpc2UvcGtpL2Nwcy50eHQAMBkGCSsGAQQB
+# gjcUAgQMHgoAUwB1AGIAQwBBMAsGA1UdDwQEAwIBhjAPBgNVHRMBAf8EBTADAQH/
+# MB8GA1UdIwQYMBaAFP5bMk121+Q3aJo4TLcCxf2u6/UlMFIGA1UdHwRLMEkwR6BF
+# oEOGQWh0dHA6Ly9jYS5udHNlcnZlcjIuc2lzZS9wa2kvQVMlMjBUYWxsaW5uYSUy
+# MFZlc2klMjBSb290JTIwQ0EuY3JsMA0GCSqGSIb3DQEBDQUAA4ICAQA72eZ7MwNC
+# TMvELWsS8GvG6mQWZt+vP8POIvWZRx9rKd5Rtx8Uul5tQVYKEPgqyAX8S6M7bQBz
+# kPXNVwXAdui7JpDr5afLYQ0Z1Vt3OeULWUT2Yh3/bS258Li6AL//r2jLzHSCKocy
+# 81sLyyiwOLX7T2cKjUMBoxEViLUxaokeApNyumbrC0LshOeiugZlYuWEPTP07MdK
+# VumehJRe9ZJy791AdRw7M8S/E38e6BdlSgNbqPQy8tBGUqG9+J8MXwPK5de8IGXr
+# fBt4iPauVeDdVKAjEtTg9IMxzUnHsoRr5s3NQi2NfdVE5pVs6lFsD/BEdmkIMNtu
+# +oAx02n7NxO+ysRF7I3vjuIb3ba+lTzybXziBWRUnXmL/s3og/ZAMgECjx9dFQ05
+# GkauggbQ5EbjMW2uoJLTEg/Q1T/uCGmXgWdc/9OihI4W90mpwSOgapFuLNF8lhAY
+# NxuKdvIA2KNqnnwti96L5LwkffM/Si1JTSSM+kq77tn4OdfSgJdqnnOfmc7HkwBo
+# gpWR4iROaFMQaOTfaISian4QiLBKA+4NhE5NCzP0LmDuntNKuBTQbjupr0sOyKvh
+# 65aZStbU2kmAfUK9kDRqRaGR/IwD4oWpvP/xnq/UzZXOhiPrHC6m3p2WtAdSlk92
+# epzTA8dzmq6mq3CDT1O3x1RMFY4HBHHKgzGCAg4wggIKAgEBMG0wVjEUMBIGCgmS
+# JomT8ixkARkWBHNpc2UxGTAXBgoJkiaJk/IsZAEZFgludHNlcnZlcjIxIzAhBgNV
+# BAMTGkFTIFRhbGxpbm5hIFZlc2kgT25saW5lIENBAhMtAAAC9kElWyJKcdrfAAAA
+# AAL2MAkGBSsOAwIaBQCgeDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqG
+# SIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3
+# AgEVMCMGCSqGSIb3DQEJBDEWBBRszSmTHbKO9E//sGXDm2sIvbLlFDANBgkqhkiG
+# 9w0BAQEFAASCAQBJSyTYW2DxB6jDM/410L6B8JNSDyfJDRgejR6l21PzMGtvO4ts
+# Gg1nm6OCG91nbco3QwDMdJmv2YaTtT19Frhq4cob6kTQakdBiUWnZztcBzi+f/4C
+# CzAswKLZf5JmQgVoE4R36qVTXQ0OjrunlDIHoHsGH5Kbgv71V7y0vFNIFzM3sX84
+# 00s5CXf3XLC605SsN7Fu8Na1TARUP/A8FPpCIvpOfYRXgpXZXLh7a65j0iniXUgI
+# l2effrRTj4ScyZlFsat1ZzcC77U563oNHGgOuyge+kHEk4AYFpd3neB6fjeoVA5h
+# 6oMxGldU4QTvf17k5wJpF159sN8qPBXW3VXW
+# SIG # End signature block

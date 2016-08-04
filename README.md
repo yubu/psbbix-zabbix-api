@@ -4,10 +4,19 @@ Powershell Module for Zabbix API
 ##### Compatibility
 - Tested with Zabbix 2.4 
 - Tested with Powershell 5
+- Some functionality tested with Powershell 2
+
+##### Additions
+- Added possibility to use with Powershell 2
+- Added functions to install/uninstall zabbix agent on local machine to library 
+- Added function to get machine host name as registered in Zabbix server - sometimes names differ, for example if imports from vsphere are used and naming schema differs
+- Added dedicated script for use in installscripts/SCCM - manageZabbixAgent.ps1
+- Did not test all module compatibility with Powershell 2
 
 ##### Based on:
 - [Zabbix](<https://onedrive.live.com/?cid=3b909e9df5dc497a&id=3B909E9DF5DC497A%213668&ithint=folder,psm1&authkey=!AJrwHxfukZT-ueA>) by Benjamin RIOUAL
 - [ZabbixPosh Api](<https://zabbixposhapi.codeplex.com/>) by simsaull
+- [pssbix](<https://github.com/yubu/psbbix-zabbix-api>) by yubu
 
 ##### Zabbix Docs:
 - [Zabbix API Libraries](<http://zabbix.org/wiki/Docs/api/libraries>)

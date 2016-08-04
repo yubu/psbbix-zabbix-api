@@ -481,6 +481,16 @@ Function Get-ZabbixAgentConfigPath {
     $installpath.ConfigFile
 }
 
+
+Function Get-ZabbixAgentServiceStatus {
+    $installpath = Get-WmiObject win32_service | ?{$_.Name -like '*Zabbix Agent*'} | select PathName, State, @{Name="ConfigFile"; Expression={ $x = $_.PathName -split "--config", 0; $x[1].Split('"')[1] } } 
+    if ($installpath -eq $null) {
+       return
+    }
+    $installpath.State
+}
+
+
 function Get-ZabbixAgentVersion {
     <# 
 	.Synopsis
@@ -530,7 +540,8 @@ function Get-ZabbixAgentVersion {
 
 function Stop-ZabbixAgent {
     $installpath = Get-ZabbixAgentExecutablePath
-    if ($installpath -ne $null) {
+    $agentstatus = Get-ZabbixAgentServiceStatus
+    if ($installpath -ne $null -and $agentstatus -eq "Running" ) {
         Start-Process -FilePath $installpath -ArgumentList "-x" -NoNewWindow
         Start-Sleep -Seconds 2
     }    

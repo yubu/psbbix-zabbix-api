@@ -15,15 +15,52 @@
 		Connect-Zabbix -User admin -Password zabbix -IPAddress zabbix.domain.net
 		Connect to Zabbix server
 	#>
+
+# http://stackoverflow.com/questions/3736188/enum-like-switch-parameter-in-powershell
+# https://blogs.technet.microsoft.com/heyscriptingguy/2011/06/30/use-parameter-sets-to-simplify-powershell-commands/
+
 Param(
-  [Parameter(Mandatory=$True)][String]$zabbixHost,
-  [Parameter(Mandatory=$True)][String]$zabbixDir,
-  [Parameter(Mandatory=$True)][String]$zabbixInstallDir,
-  [string]$modulePath,
+  [Parameter(ParameterSetName='Status')]  
+  [switch]$Status,
+
+  [Parameter(ParameterSetName='Stop')]  
+  [switch]$Stop,
+
+  [Parameter(ParameterSetName='Start')]  
+  [switch]$Start,
+
+  [Parameter(ParameterSetName='Uninstall')]  
+  [switch]$Uninstall,
+
+  [Parameter(ParameterSetName='Install')]  
+  [switch]$Install,
+
+
+  [Parameter(ParameterSetName='Install')]
+  [String]$ZabbixHost,
+  
+  [Parameter(ParameterSetName='Install')]
+  [String]$ZabbixDir,
+
+  [Parameter(ParameterSetName='Install')]
+  [String]$ZabbixInstallDir,
+
+  [Parameter(ParameterSetName='Install')]
+  [string]$ZabbixAgentName, 
+
+  [Parameter(ParameterSetName='Install')]
   [string]$Username, 
-  [string]$passwordFilePath, 
+
+  [Parameter(ParameterSetName='Install')]
+  [string]$PasswordFilePath, 
+
+  [Parameter(ParameterSetName='Install')]
   [string]$Password, 
-  [System.Management.Automation.PSCredential]$PSCredential
+
+  [Parameter(ParameterSetName='Install')]
+  [System.Management.Automation.PSCredential]$PSCredential,
+
+  [string]$ModulePath
 )
 
 
@@ -64,74 +101,135 @@ Function Import-Module-pssbix {
     return $false
 }
 
-if ($false -eq (Import-Module-pssbix -modulePath $modulePath)) {
+if ($false -eq (Import-Module-pssbix -modulePath $ModulePath)) {
     write-error "Could not load psbbix module. Exiting"
     exit 1
 }
 
-# credidentials
-# http://stackoverflow.com/questions/6239647/using-powershell-credentials-without-being-prompted-for-a-password
+# Status
 
-$cred = $null
+if ($Status -eq $true) {
 
-if ($PSCredential -ne $null) {
-    
-    write-host "Using provided Creditentials"
-    $cred = $PSCredential
+    $zabbixversion = Get-ZabbixAgentVersion
 
-} else {
-    $spassword = $null
-
-    if  ($passwordFilePath -ne "" )  {
-        if (-not (Test-Path $passwordFilePath))  {
-            Write-Error "Could not find file $passwordFilePath"
-            exit 1
-        }
-        Try {
-           $spassword = cat $passwordFilePath | convertto-securestring -ErrorAction Stop
-        }
-        Catch {
-            Write-Error "Secure seting can only be opened by account that created it!"
-            write-error "Cannot proceed without opening password file. Create one using read-host -assecurestring | convertfrom-securestring | out-file filename"
-            exit 1
-        } 
-        
-    } else {
-        if ($Password -ne "") {
-            $spassword = ConvertTo-SecureString $Password -AsPlainText -Force
+    if ($zabbixversion -ne $null) {
+        $zabbixstatus = Get-ZabbixAgentServiceStatus
+        if ($zabbixstatus -ne $null) {
+            $zabbixversion = "$zabbixversion : $zabbixstatus"
         } else {
-            Write-Error "Either -PSCredential or (-Username and -Password | -passwordFilePath ) must be specified!"
-            exit
+            $zabbixversion = "$zabbixversion : unknown"
         }
+    } else {
+        "Not installed!"
     }
 
-    if ($Username -eq "") {
-        Write-Error "Either -PSCredential or (-Username and -Password | -passwordFilePath ) must be specified!"
-        exit
+    $zabbixversion
+    exit 0
+}
+
+
+# Stop
+
+if ($Stop -eq $true) {
+
+    Stop-ZabbixAgent
+    
+    exit 0
+}
+
+
+# Start
+
+if ($Start -eq $true) {
+
+    Start-ZabbixAgent
+    
+    exit 0
+}
+
+
+# Uninstall
+
+if ($Uninstall -eq $true) {
+
+    Uninstall-ZabbixAgent
+    
+    exit 0
+}
+
+
+# Install
+
+if ($Install -eq $true) {
+
+    # Parameters check       
+
+    if ($ZabbixHost -eq $null -or $ZabbixHost -eq "") {        
+        throw "ZabbixHost parameter is required for installation"
+    }
+
+    if ($ZabbixDir -eq $null -or $ZabbixDir -eq "") {        
+        throw "ZabbixDir parameter is required for installation"
+    }
+
+    if ($ZabbixInstallDir -eq $null -or $ZabbixInstallDir -eq "") {        
+        throw "ZabbixInstallDir parameter is required for installation"
     }
     
-    $cred = new-object -typename System.Management.Automation.PSCredential `
-         -argumentlist $Username, $spassword
+
+    # If no aggent name is given, then we need to retrieve it.
+    if ($ZabbixAgentName -eq $null -or $ZabbixAgentName -eq "") {
+
+        # credidentials
+        # http://stackoverflow.com/questions/6239647/using-powershell-credentials-without-being-prompted-for-a-password
+        $cred = $null
+
+        if ($PSCredential -ne $null) {
+            Write-Verbose "Using provided Creditentials"
+            $cred = $PSCredential
+
+        } else {
+            $spassword = $null
+
+            if  ($passwordFilePath -ne $null -and $passwordFilePath -ne "" )  {
+                if (-not (Test-Path $passwordFilePath))  {
+                    throw "Could not find file $passwordFilePath"
+                    exit 1
+                }
+                Try {
+                   $spassword = cat $passwordFilePath | convertto-securestring -ErrorAction Stop
+                }
+                Catch {
+                    
+                    throw "Cannot proceed without opening password file. Create one using read-host -assecurestring | convertfrom-securestring | out-file filename"                    
+                } 
+        
+            } else {
+                if ($Password -ne $null -and $Password -ne "") {
+                    $spassword = ConvertTo-SecureString $Password -AsPlainText -Force
+                } else {
+                    throw "Either -PSCredential or (-Username and -Password | -PasswordFilePath ) must be specified!"                    
+                }
+            }
+
+            if ($Username -eq "") {
+                throw "Either -PSCredential or (-Username and -Password | -passwordFilePath ) must be specified!"                
+            }
+    
+            $cred = new-object -typename System.Management.Automation.PSCredential -argumentlist $Username, $spassword
+
+
+        }
+
+        New-ZabbixSession -PSCredential $cred -IPAddress $ZabbixHost 
+        $ZabbixAgentName = Get-ZabbixAgentHostname @zabSessionParams
+
+    } 
+
+    if ($ZabbixAgentName -eq $null -or $ZabbixAgentName -eq "") {
+        throw "Unable to determine ZabbixAgentName."
+    }
+
+    Install-ZabbixAgent -zabbixHost $ZabbixHost -zabbixDir $ZabbixDir -zabbixInstallDir $ZabbixInstallDir -zabbixAgentName $ZabbixAgentName -Upgrade
+
 }
-
-
-# Now check if host is regiestered in zabbix server. We do so by looking for dns name of host in zabbix hosts interfaces.
-
-New-ZabbixSession -PSCredential $cred -IPAddress $zabbixHost
-$agentname = Get-ZabbixAgentHostname @zabSessionParams
-
-write-host "Found zabbix host: $agentname" -f Yellow
-
-
-
-
-$izv = Get-ZabbixAgentVersion
-
-if ($izv -eq $null) {
-  write-host "Zabbix Agent not installed!"
-} else {
-  Write-Host "Zabbix agent installed: $izv"
-}
-
-
-

@@ -14,6 +14,7 @@ Powershell Module for Zabbix API
 - Did not test all module compatibility with Powershell 2
 - Signed code for internal company use. You can ignore it.
 
+
 ##### Based on:
 - [Zabbix](<https://onedrive.live.com/?cid=3b909e9df5dc497a&id=3B909E9DF5DC497A%213668&ithint=folder,psm1&authkey=!AJrwHxfukZT-ueA>) by Benjamin RIOUAL
 - [ZabbixPosh Api](<https://zabbixposhapi.codeplex.com/>) by simsaull

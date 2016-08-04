@@ -30,56 +30,6 @@ function ConvertTo-Json20([object] $item, $Depth ){
 }
 
 
-function ParseItem($jsonItem) 
-{
-    if($jsonItem.PSObject.TypeNames -match 'Array') 
-    {
-        return ParseJsonArray($jsonItem)
-    }
-    elseif($jsonItem.PSObject.TypeNames -match 'Dictionary') 
-    {
-        return ParseJsonObject([HashTable]$jsonItem)
-    }
-    else 
-    {
-        return $jsonItem
-    }
-}
-
-function ParseJsonObject($jsonObj) 
-{
-    $result = New-Object -TypeName PSCustomObject
-    foreach ($key in $jsonObj.Keys) 
-    {
-        $item = $jsonObj[$key]
-        if ($item) 
-        {
-            $parsedItem = ParseItem $item
-        }
-        else 
-        {
-            $parsedItem = $null
-        }
-        $result | Add-Member -MemberType NoteProperty -Name $key -Value $parsedItem
-    }
-    return $result
-}
-
-function ParseJsonArray($jsonArray) 
-{
-    $result = @()
-    $jsonArray | ForEach-Object -Process {
-        $result += , (ParseItem $_)
-    }
-    return $result
-}
-
-function ParseJsonString($json) 
-{
-    $config = $javaScriptSerializer.DeserializeObject($json)
-    return ParseJsonObject($config)
-}
-
 
 
 
@@ -90,6 +40,59 @@ function ConvertFrom-Json20([object] $item){
      if (Test-Command -cmdname "ConvertFrom-Json") {        
          return ConvertFrom-Json($item)        
      } else {
+
+
+        function ParseItem($jsonItem) 
+        {
+            if($jsonItem.PSObject.TypeNames -match 'Array') 
+            {
+                return ParseJsonArray($jsonItem)
+            }
+            elseif($jsonItem.PSObject.TypeNames -match 'Dictionary') 
+            {
+                return ParseJsonObject([HashTable]$jsonItem)
+            }
+            else 
+            {
+                return $jsonItem
+            }
+        }
+
+        function ParseJsonObject($jsonObj) 
+        {
+            $result = New-Object -TypeName PSCustomObject
+            foreach ($key in $jsonObj.Keys) 
+            {
+                $item = $jsonObj[$key]
+                if ($item) 
+                {
+                    $parsedItem = ParseItem $item
+                }
+                else 
+                {
+                    $parsedItem = $null
+                }
+                $result | Add-Member -MemberType NoteProperty -Name $key -Value $parsedItem
+            }
+            return $result
+        }
+
+        function ParseJsonArray($jsonArray) 
+        {
+            $result = @()
+            $jsonArray | ForEach-Object -Process {
+                $result += , (ParseItem $_)
+            }
+            return $result
+        }
+
+        function ParseJsonString($json) 
+        {
+            $config = $javaScriptSerializer.DeserializeObject($json)
+            return ParseJsonObject($config)
+        }
+
+
 
         add-type -assembly system.web.extensions
 
@@ -459,6 +462,235 @@ Function Get-ZabbixAgentHostname {
     return $agentname
 
 }
+
+
+Function Get-ZabbixAgentExecutablePath {
+    $installpath = Get-WmiObject win32_service | ?{$_.Name -like '*Zabbix Agent*'} | select Name, DisplayName, @{Name="Path"; Expression={$_.PathName.split('"')[1]}} 
+    if ($installpath -eq $null) {
+       return
+    }
+    $installpath.Path
+}
+
+
+Function Get-ZabbixAgentConfigPath {
+    $installpath = Get-WmiObject win32_service | ?{$_.Name -like '*Zabbix Agent*'} | select PathName,  @{Name="ConfigFile"; Expression={ $x = $_.PathName -split "--config", 0; $x[1].Split('"')[1] } } 
+    if ($installpath -eq $null) {
+       return
+    }
+    $installpath.ConfigFile
+}
+
+function Get-ZabbixAgentVersion {
+    <# 
+	.Synopsis
+		Gets version of zabbix agent installed.
+	.Description
+		Gets version of zabbix agent installed.
+    .Example
+		Get-ZabbixAgentVersion
+		Get version of zabbix agent agent or $null
+    #>
+
+    #http://stackoverflow.com/questions/8761888/powershell-capturing-standard-out-and-error-with-start-process
+
+    $installpath = Get-ZabbixAgentExecutablePath
+    write-verbose "Zabbix Agent path $installpath" 
+
+    $version = $null
+
+    if ($installpath -ne $null) {
+        $pinfo = New-Object System.Diagnostics.ProcessStartInfo
+        $pinfo.FileName = $installpath
+        $pinfo.RedirectStandardError = $true
+        $pinfo.RedirectStandardOutput = $true
+        $pinfo.UseShellExecute = $false
+        $pinfo.Arguments = "-t agent.version"
+        $p = New-Object System.Diagnostics.Process
+        $p.StartInfo = $pinfo
+        $p.Start() | Out-Null
+        $p.WaitForExit()
+        $stdout = $p.StandardOutput.ReadToEnd()
+        $stderr = $p.StandardError.ReadToEnd()
+
+        if ($p.ExitCode -ne 0) {
+            write-host "Error occured when executing $installpath"
+            Write-Host $stderr -ForegroundColor Red
+            return $null
+        }
+
+        if ($stdout.Contains("agent.version")) {
+            $version = $stdout.Split("|")[1].Split("]")[0]    
+        }        
+    }
+    return $version
+
+}
+
+
+function Stop-ZabbixAgent {
+    $installpath = Get-ZabbixAgentExecutablePath
+    if ($installpath -ne $null) {
+        Start-Process -FilePath $installpath -ArgumentList "-x" -NoNewWindow
+        Start-Sleep -Seconds 2
+    }    
+}
+
+function Uninstall-ZabbixAgent {
+
+    stop-ZabbixAgent
+
+    $installpath = Get-ZabbixAgentExecutablePath
+    if ($installpath -ne $null) {
+        Start-Process -FilePath $installpath -ArgumentList "-d" -NoNewWindow
+        Start-Sleep -Seconds 2
+    }
+   
+}
+
+function Start-ZabbixAgent {
+    $installpath = Get-ZabbixAgentExecutablePath
+    if ($installpath -ne $null) {
+        $configpath = Get-ZabbixAgentConfigPath
+        if ($configpath -eq $null) {
+            $argumentlist = "-s"
+        } else {
+            $argumentlist = '-c ' +'"'+$configpath+'" -s'
+        }
+        Start-Process -FilePath $installpath -ArgumentList $argumentlist -NoNewWindow
+        Start-Sleep -Seconds 2
+        return $true
+    } else {
+        write-error "Cannot start Zabbix Agent, could not retrieve executable path!"
+        return $false
+    }
+
+}
+
+function Install-ZabbixAgent {
+    <# 
+	.Synopsis
+		Install zabbix agent
+	.Description
+		Installs Zabbix agent to indicated directory or upgrades already existing installation. 
+        Uses code from https://www.reddit.com/r/sysadmin/comments/2iobp6/so_i_have_to_deploy_zabbix_agents_on_hundres_of/
+	.Parameter zabbixHost
+		Zabbix server host in form of hostname or ip address
+	.Parameter zabbixDir
+		Directory where to install zabbix files
+    .Parameter zabbixInstallDir
+		Directory or UNC path where zabbix source files are copied from
+    .Parameter zabbixAgentName
+        Agent name to use in configuration file. This is to be get outisde of function using Get-ZabbixAgentHostname
+    .Parameter Upgrade
+        If $true, existing installation will be upgraded, if $false, agent will be installed only if no installation exist. Error will be given if  agent is found
+    #>
+    [CmdletBinding()]
+	Param (
+        [Parameter(Mandatory=$True)][String]$zabbixHost,
+        [Parameter(Mandatory=$True)][String]$zabbixDir,
+        [Parameter(Mandatory=$True)][String]$zabbixInstallDir,
+        [Parameter(Mandatory=$True)][String]$zabbixAgentName,
+        [Parameter(Mandatory=$True)][switch]$Upgrade=$false
+    )
+
+    if (!(Test-Path -Path $zabbixInstallDir)) {
+        Write-Error "Cannot find installation source folder $zabbixInstallDir"
+        return $null
+    }
+
+
+    
+
+    $existingZabbixVersion = Get-ZabbixAgentVersion
+    $existingZabbixPath = Get-ZabbixAgentExecutablePath
+    $existingZabbixConfigPath = Get-ZabbixAgentConfigPath
+
+    
+    if ($existingZabbixVersion -ne $null -or $existingZabbixPath -ne $null)  {
+        if ($Upgrade -eq $false) {
+            write-error "Upgrade switch was not specified and existing installation was found"
+            return $null
+        }   else {
+            # stop existing installation
+
+            # Stop-ZabbixAgent
+
+            Uninstall-ZabbixAgent
+        }
+    }
+
+
+    #create agent directory if it doesn't exists
+    if (!(Test-Path -Path $zabbixDir))
+    {
+        New-Item $zabbixDir -ItemType Directory
+    }
+
+
+    #copy Zabbix agent to server
+    Copy-Item "$zabbixInstallDir\bin" $zabbixDir -Recurse -Force | out-null
+
+    Copy-Item "$zabbixInstallDir\conf" $zabbixDir -Recurse -Force | out-null
+
+
+    # Default Zabbix client folder structure is expected 
+   
+    if ([System.IntPtr]::Size -eq 4) {
+        $newZabbixPath = $zabbixDir+"\bin\win32\zabbix_agentd.exe"   
+    } else {
+        $newZabbixPath = $zabbixDir+"\bin\win64\zabbix_agentd.exe"
+    }
+
+    if (!(Test-Path -Path $newZabbixPath)) {
+        write-error "Cannot find $newZabbixPath executable. Default Zabbix client layout is expected"
+        return $null
+    }
+
+     $newZabbixConfigPath = $zabbixDir+"\conf\zabbix_agentd.win.conf"
+
+    if (!(Test-Path -Path $newZabbixConfigPath)) {
+        write-error "Cannot find $newZabbixConfigPath config file. Default Zabbix client layout is expected"
+        return $null
+    }
+
+
+   
+    $newZabbixLogDir = $zabbixDir+"\log"
+    $newZabbixLogFile = $newZabbixLogDir + "\zabbix_agentd.log"
+
+    #create agent directory if it doesn't exists
+    if (!(Test-Path -Path $newZabbixLogDir))
+    {
+        New-Item $newZabbixLogDir -ItemType Directory
+    }
+
+
+
+
+    #replace the place holder of SYSTEM NAME with the server's name in the config file
+    
+    (Get-Content $newZabbixConfigPath) | ForEach-Object {
+        $_ -replace '#SERVER#',$zabbixHost -replace '#LOGFILE#', $newZabbixLogFile  -replace '#AGENTNAME#', $zabbixAgentName
+    } | Out-File $newZabbixConfigPath
+
+
+    #read the configuration file and then encode it as UTF8.  If this isn't done, all hell breaks loose with the agent.
+    $confFile = $newZabbixConfigPath
+    $fileContents = Get-Content $confFile
+    $Utf8NoBomEncoding = New-Object System.Text.UTF8Encoding($False)
+    [System.IO.File]::WriteAllLines($confFile, $filecontents, $Utf8NoBomEncoding)
+
+
+    $argumentlist = '-c ' +'"'+$newZabbixConfigPath+'" -i'
+
+    Start-Process -FilePath $newZabbixPath -ArgumentList $argumentlist -NoNewWindow
+    Start-Sleep -Seconds 2
+
+    
+
+}
+
 
 Function Get-ZabbixHost {
 	<# 

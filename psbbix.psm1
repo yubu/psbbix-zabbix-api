@@ -380,6 +380,86 @@ Function Get-ZabbixVersion {
 	}
 }
 
+
+Function Get-ZabbixAgentHostname {
+    <# 
+	.Synopsis
+		Get name registered for zabbix agent for computer script is being run on.
+	.Description
+		Get name registered for zabbix agent for computer script is being run on. This is required when name under which zabbix host is 
+        registered differs from computer name. This is case for example for machines in vSphere.
+    .Example
+		Get-ZabbixAgentHostname @zabSessionParams
+		Get name of zabbix agent in server for executing computer
+    #>
+    [CmdletBinding()]
+	Param ( 
+		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+    )
+
+
+    # Get local machine information
+    $computername = $env:COMPUTERNAME
+
+    $ipdata = Get-WmiObject -Class Win32_NetworkAdapterConfiguration -Filter IPEnabled=TRUE -ComputerName . | ? {$_.DefaultIPGateway -ne $null } | select IPAddress,DNSDomain
+    $ip = $ipdata.IPAddress
+
+    $objIPProperties = [System.Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties()
+
+    $fqdn = $(
+        if (($objIPProperties.DomainName -eq $null)) {
+        "{0}" -f $objIPProperties.HostName
+        }
+        else {
+        "{0}.{1}" -f $objIPProperties.HostName, $objIPProperties.DomainName
+        }
+    )
+
+    $zabbixhosts = Get-ZabbixHost @zabSessionParams  | select host, 
+        @{Name="dns"; Expression={$_.Interfaces.dns}}, 
+        @{Name="useip"; Expression={$_.Interfaces.useip}},
+        @{Name="ip"; Expression={$_.Interfaces.ip}},
+        @{Name="port"; Expression={$_.Interfaces.port}},
+        @{Name="interfaceid"; Expression={$_.Interfaces.interfaceid}}
+
+    $hostbyfqdn = $zabbixhosts | ? {$_.port -match 10050} | ? {$_.useip -match 0} | ? {$_.dns -eq $fqdn} | select host
+
+    $hostbycomputername = $zabbixhosts | ? {$_.port -match 10050} | ? {$_.useip -match 0} | ? {$_.dns -eq $computername } | select host
+
+    $hostbyip = $zabbixhosts | ? {$_.port -match 10050} | ? {$_.useip -match 0} | ? {$_.ip -eq $ip} |  select host
+
+
+    $agentname = $null
+
+
+    # check 
+    if ($hostbyfqdn.host -ne $null) { $agentname = $hostbyfqdn.host }
+    if ($hostbycomputername.host -ne $null) {          
+    
+        if ( ($agentname -ne $null) -and ($hostbycomputername.host -ne $agentname) ) {
+        
+            Write-Error "Multiple names matched! Cannot reliably report agent name"
+            return $null
+        }
+        $agentname = $hostbycomputername.host
+    }
+
+    if ($hostbyip.host -ne $null) {
+        if (($agentname -ne $null) -and  ($hostbyip.host -ne $agentname)) {
+            Write-Error "Multiple names matched! Cannot reliably report agent name"
+            return $null
+            
+        }
+        $agentname = $hostbyip.host
+    }
+
+    return $agentname
+
+}
+
 Function Get-ZabbixHost {
 	<# 
 	.Synopsis

@@ -101,8 +101,8 @@ $ip = $ipdata.IPAddress
 
 $dnsdomain = $ipdata.DNSDomain
 
-$ip
-$dnsdomain
+#$ip
+#$dnsdomain
 
 
 
@@ -123,7 +123,12 @@ write-host $fqdn2 -ForegroundColor Yellow
 
 New-ZabbixSession -PSCredential $cred -IPAddress zabbix02.ntserver2.sise
 
-$zabbixhosts = Get-ZabbixHost @zabSessionParams  | select host -ExpandProperty interfaces 
+$zabbixhosts = Get-ZabbixHost @zabSessionParams  | select host, 
+    @{Name="dns"; Expression={$_.Interfaces.dns}}, 
+    @{Name="useip"; Expression={$_.Interfaces.useip}},
+    @{Name="ip"; Expression={$_.Interfaces.ip}},
+    @{Name="port"; Expression={$_.Interfaces.port}},
+    @{Name="interfaceid"; Expression={$_.Interfaces.interfaceid}}
 
 $hostbyfqdn = $zabbixhosts | ? {$_.port -match 10050} | ? {$_.useip -match 0} | ? {$_.dns -eq $fqdn} | select host
 
@@ -173,7 +178,9 @@ function installed_ZabbixAgentVersion {
     #http://stackoverflow.com/questions/8761888/powershell-capturing-standard-out-and-error-with-start-process
 
     $installpath = installed_ZabbixAgentExecutablePath
-    write-host "Zabbix Agent path $installpath" -ForegroundColor Yellow
+    write-verbose "Zabbix Agent path $installpath" 
+
+    $version = $null
 
     if ($installpath -ne $null) {
         $pinfo = New-Object System.Diagnostics.ProcessStartInfo
@@ -181,27 +188,48 @@ function installed_ZabbixAgentVersion {
         $pinfo.RedirectStandardError = $true
         $pinfo.RedirectStandardOutput = $true
         $pinfo.UseShellExecute = $false
-        $pinfo.Arguments = "--version"
+        $pinfo.Arguments = "-t agent.version"
         $p = New-Object System.Diagnostics.Process
         $p.StartInfo = $pinfo
         $p.Start() | Out-Null
         $p.WaitForExit()
         $stdout = $p.StandardOutput.ReadToEnd()
         $stderr = $p.StandardError.ReadToEnd()
-        Write-Host "stdout: $stdout"
-        Write-Host "stderr: $stderr"
-        Write-Host "exit code: " + $p.ExitCode
+
+        if ($p.ExitCode -ne 0) {
+            write-host "Error occured when executing $installpath"
+            Write-Host $stderr -ForegroundColor Red
+            return $null
+        }
+
+        if ($stdout.Contains("agent.version")) {
+            $version = $stdout.Split("|")[1].Split("]")[0]    
+        }        
     }
+    return $version
 
 }
 
 
+function stop_ZabbixAgent {
+    $installpath = installed_ZabbixAgentExecutablePath
+    if ($installpath -ne $null) {
+        Start-Process -FilePath $installpath -ArgumentList "-x" -NoNewWindow
+        Start-Sleep -Seconds 2
+    }
 
+}
 
 function uninstall_ZabbixAgent {
 
-    
+    stop_ZabbixAgent
 
+    $installpath = installed_ZabbixAgentExecutablePath
+    if ($installpath -ne $null) {
+        Start-Process -FilePath $installpath -ArgumentList "-d" -NoNewWindow
+        Start-Sleep -Seconds 2
+    }
+   
 }
 
 
@@ -210,6 +238,8 @@ $izv = installed_ZabbixAgentVersion
 
 if ($izv -eq $null) {
   write-host "Zabbix Agent not installed!"
+} else {
+  Write-Host "Zabbix agent installed: $izv"
 }
 
 

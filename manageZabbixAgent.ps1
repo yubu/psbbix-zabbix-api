@@ -181,8 +181,20 @@ if ($Install -eq $true) {
         throw "ZabbixDir parameter is required for installation"
     }
 
-    if ($ZabbixInstallDir -eq $null -or $ZabbixInstallDir -eq "") {        
-        throw "ZabbixInstallDir parameter is required for installation"
+    if ($ZabbixInstallDir -eq $null -or $ZabbixInstallDir -eq "" -or $ZabbixInstallDir.StartsWith(".\")) {        
+
+        # Try scrip path
+        $tempZabbixInstallDir = (Split-Path $script:MyInvocation.MyCommand.Path) + $ZabbixInstallDir.ToString()
+       
+
+        if ($tempZabbixInstallDir -ne "" -and (Test-Path $($tempZabbixInstallDir+"\bin") ) -and (Test-Path $($tempZabbixInstallDir+"\conf") )) {
+
+            $ZabbixInstallDir = $tempZabbixInstallDir
+
+        } else {
+
+            throw "ZabbixInstallDir parameter is required for installation"
+        }
     }
     
     if ($ZabbixRegisterAgent -eq $true) {
@@ -247,8 +259,8 @@ if ($Install -eq $true) {
 # SIG # Begin signature block
 # MIINNwYJKoZIhvcNAQcCoIINKDCCDSQCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUZoxSPzOrxTqT2oFwyw8/5ubI
-# cKmgggqTMIIFFzCCA/+gAwIBAgITLQAAAvZBJVsiSnHa3wAAAAAC9jANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUdKXYj0v1hd4vv8xTR1xdcm58
+# v9CgggqTMIIFFzCCA/+gAwIBAgITLQAAAvZBJVsiSnHa3wAAAAAC9jANBgkqhkiG
 # 9w0BAQsFADBWMRQwEgYKCZImiZPyLGQBGRYEc2lzZTEZMBcGCgmSJomT8ixkARkW
 # CW50c2VydmVyMjEjMCEGA1UEAxMaQVMgVGFsbGlubmEgVmVzaSBPbmxpbmUgQ0Ew
 # HhcNMTYwMzE0MTIzMDQyWhcNMjEwMzEzMTIzMDQyWjBxMRQwEgYKCZImiZPyLGQB
@@ -309,11 +321,11 @@ if ($Install -eq $true) {
 # BAMTGkFTIFRhbGxpbm5hIFZlc2kgT25saW5lIENBAhMtAAAC9kElWyJKcdrfAAAA
 # AAL2MAkGBSsOAwIaBQCgeDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqG
 # SIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3
-# AgEVMCMGCSqGSIb3DQEJBDEWBBScR5l3LL8Z4+rXZgFNe0o2atjYqTANBgkqhkiG
-# 9w0BAQEFAASCAQBx96scsMWpiXF3fuO20yzRd25UR7QHnNmzID8fgKneDwScrwr4
-# FOwqcjjFMXiRGC3knGVSxN8KtnNChjpmzT7hF40Z3t8OrgZk3CxgXlCLYrUGrr98
-# 1Iz38Aa1Qgbisn/U0OoFPqP/oHF2eluOtWLE5k6t7S05agyGgit3BYsw6tMKU0Fy
-# 3fhJtO6sFoUvOvJZH/OzflA3jOLdp9u0XJfPsFx1zA4werIfTC1HFK/t3RZgw3Pt
-# 8cB4TEXkOaXJdJ+1vJ+5+bpBHwx4m7PjGDL3ZydDqWFDcgveD9NsPa26ijqDqYP9
-# M+MqlA6cSf52AEMTTXUngS/RSg8HYVrZmpxq
+# AgEVMCMGCSqGSIb3DQEJBDEWBBRNTWNCx4K3hRqOSmjGQMSJafuuzzANBgkqhkiG
+# 9w0BAQEFAASCAQCU3aqGSsQ9LmZKz8WhBHss9lZdKZndwOiQdjJ8Kbu/WrwwMLg6
+# rT6UHHjVhQbfEAtcorBxBjkTL27Ho1ByLe56WI4GjtqjD9ZEtb2AbFw4w81zsdmT
+# EsLt19JjXLIvmfBWfD5O6utVA09S1kZ+p/kFhXCYE3tPtJod+M44A83h2NSkVKun
+# i3ihSObrjnQsQ5/9ORaJlIldIoL3+Z0I1WW/6MqYHAb8lflMrLQtMkAyocqdwiuZ
+# ojwGiwXGXGD4V1NG9UcdDZULaVU6jJR70EUo1DlIT7ZydJC+KIBcm7KRydHa98P4
+# rAb39XldczuopH+Cptan8pyyjcVhNxJfd+j7
 # SIG # End signature block

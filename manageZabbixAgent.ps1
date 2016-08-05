@@ -49,6 +49,15 @@ Param(
   [string]$ZabbixAgentName, 
 
   [Parameter(ParameterSetName='Install')]
+  [switch]$ZabbixRegisterAgent, 
+
+  [Parameter(Mandatory=$False,ParameterSetName='Install')][string]$GroupID,
+  [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true,ParameterSetName='Install')][array]$Groups,
+  [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true,ParameterSetName='Install')][array]$TemplateID,
+  [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true,ParameterSetName='Install')][array]$Templates,
+  [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true,ParameterSetName='Install')][switch]$MonitorByDNSName,
+
+  [Parameter(ParameterSetName='Install')]
   [string]$Username, 
 
   [Parameter(ParameterSetName='Install')]
@@ -176,51 +185,52 @@ if ($Install -eq $true) {
         throw "ZabbixInstallDir parameter is required for installation"
     }
     
+    if ($ZabbixRegisterAgent -eq $true) {
+
+
+        $ipdata = Get-WmiObject -Class Win32_NetworkAdapterConfiguration -Filter IPEnabled=TRUE -ComputerName . | ? {$_.DefaultIPGateway -ne $null } | select IPAddress,DNSDomain
+        $ip = $ipdata.IPAddress[0]
+
+        $objIPProperties = [System.Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties()
+
+        $fqdn = $(
+            if (($objIPProperties.DomainName -eq $null)) {
+            "{0}" -f $objIPProperties.HostName
+            }
+            else {
+            "{0}.{1}" -f $objIPProperties.HostName, $objIPProperties.DomainName
+            }
+        )
+
+
+        if ($ZabbixAgentName -eq $null -or $ZabbixAgentName -eq "") {
+            # throw "-ZabbixRegisterAgent parameter expects -ZabbixAgentName to be present"                    
+            $ZabbixAgentName = $fqdn
+        }
+
+        $cred = Get-ZabbixCreditentials -Username $Username -Password $Password -PasswordFilePath $PasswordFilePath -PSCredential $PSCredential
+        
+        New-ZabbixSession -PSCredential $cred -IPAddress $ZabbixHost 
+
+
+        
+
+        if ($MonitorByDNSName) {
+
+            New-ZabbixHost @zabSessionParams -HostName $ZabbixAgentName -IP $ip -DNSName $fqdn -MonitorByDNSName  -GroupID $GroupID -TemplateID $TemplateID -status 0
+        } else {
+            New-ZabbixHost @zabSessionParams -HostName $ZabbixAgentName -IP $ip -DNSName $fqdn -GroupID $GroupID -TemplateID $TemplateID -status 0
+        }
+
+    }
 
     # If no aggent name is given, then we need to retrieve it.
     if ($ZabbixAgentName -eq $null -or $ZabbixAgentName -eq "") {
 
         # credidentials
         # http://stackoverflow.com/questions/6239647/using-powershell-credentials-without-being-prompted-for-a-password
-        $cred = $null
-
-        if ($PSCredential -ne $null) {
-            Write-Verbose "Using provided Creditentials"
-            $cred = $PSCredential
-
-        } else {
-            $spassword = $null
-
-            if  ($passwordFilePath -ne $null -and $passwordFilePath -ne "" )  {
-                if (-not (Test-Path $passwordFilePath))  {
-                    throw "Could not find file $passwordFilePath"
-                    exit 1
-                }
-                Try {
-                   $spassword = cat $passwordFilePath | convertto-securestring -ErrorAction Stop
-                }
-                Catch {
-                    
-                    throw "Cannot proceed without opening password file. Create one using read-host -assecurestring | convertfrom-securestring | out-file filename"                    
-                } 
+        $cred = Get-ZabbixCreditentials -Username $Username -Password $Password -PasswordFilePath $PasswordFilePath -PSCredential $PSCredential
         
-            } else {
-                if ($Password -ne $null -and $Password -ne "") {
-                    $spassword = ConvertTo-SecureString $Password -AsPlainText -Force
-                } else {
-                    throw "Either -PSCredential or (-Username and -Password | -PasswordFilePath ) must be specified!"                    
-                }
-            }
-
-            if ($Username -eq "") {
-                throw "Either -PSCredential or (-Username and -Password | -passwordFilePath ) must be specified!"                
-            }
-    
-            $cred = new-object -typename System.Management.Automation.PSCredential -argumentlist $Username, $spassword
-
-
-        }
-
         New-ZabbixSession -PSCredential $cred -IPAddress $ZabbixHost 
         $ZabbixAgentName = Get-ZabbixAgentHostname @zabSessionParams
 
@@ -231,14 +241,14 @@ if ($Install -eq $true) {
     }
 
     Install-ZabbixAgent -zabbixHost $ZabbixHost -zabbixDir $ZabbixDir -zabbixInstallDir $ZabbixInstallDir -zabbixAgentName $ZabbixAgentName -Upgrade
-
+    exit 0   
 }
 
 # SIG # Begin signature block
 # MIINNwYJKoZIhvcNAQcCoIINKDCCDSQCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUNNO4moTfBIseFqO+RWyeg0r7
-# R7CgggqTMIIFFzCCA/+gAwIBAgITLQAAAvZBJVsiSnHa3wAAAAAC9jANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUZoxSPzOrxTqT2oFwyw8/5ubI
+# cKmgggqTMIIFFzCCA/+gAwIBAgITLQAAAvZBJVsiSnHa3wAAAAAC9jANBgkqhkiG
 # 9w0BAQsFADBWMRQwEgYKCZImiZPyLGQBGRYEc2lzZTEZMBcGCgmSJomT8ixkARkW
 # CW50c2VydmVyMjEjMCEGA1UEAxMaQVMgVGFsbGlubmEgVmVzaSBPbmxpbmUgQ0Ew
 # HhcNMTYwMzE0MTIzMDQyWhcNMjEwMzEzMTIzMDQyWjBxMRQwEgYKCZImiZPyLGQB
@@ -299,11 +309,11 @@ if ($Install -eq $true) {
 # BAMTGkFTIFRhbGxpbm5hIFZlc2kgT25saW5lIENBAhMtAAAC9kElWyJKcdrfAAAA
 # AAL2MAkGBSsOAwIaBQCgeDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqG
 # SIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3
-# AgEVMCMGCSqGSIb3DQEJBDEWBBTWtzryG1GiTRsNSWOOwCKGA8ScLTANBgkqhkiG
-# 9w0BAQEFAASCAQBYSF6IzJtevScMyA96ggz3BI97D6UySrLWsOaZ1N82W7TE9iVZ
-# MXjNfetOFb9HtNbO4HGfUgt5Dpk7wrsTBoeFy30gTDs5pkTMex8eM2OCwgghySEt
-# hp1OKcxPz1VTzRBDflRKBnu2T9O6ESWIIJIvggP61G7vl59lmUO3iqCSPXoyO1VH
-# tFfOqKUaF8HaQMEY2TDbRBTlmoM1LRHRfgezaKncHKrjyeaC4mRCl/R4YWlaLbiJ
-# 269j5EloKg8UCtQiULeyOG52Mw3sAjgCB+Q1vbX6ib+lpkY7PbFm75WBU0hxBSie
-# qW/Aq1REgllzjyCXNXdxqpNTndG/g1htoZRT
+# AgEVMCMGCSqGSIb3DQEJBDEWBBScR5l3LL8Z4+rXZgFNe0o2atjYqTANBgkqhkiG
+# 9w0BAQEFAASCAQBx96scsMWpiXF3fuO20yzRd25UR7QHnNmzID8fgKneDwScrwr4
+# FOwqcjjFMXiRGC3knGVSxN8KtnNChjpmzT7hF40Z3t8OrgZk3CxgXlCLYrUGrr98
+# 1Iz38Aa1Qgbisn/U0OoFPqP/oHF2eluOtWLE5k6t7S05agyGgit3BYsw6tMKU0Fy
+# 3fhJtO6sFoUvOvJZH/OzflA3jOLdp9u0XJfPsFx1zA4werIfTC1HFK/t3RZgw3Pt
+# 8cB4TEXkOaXJdJ+1vJ+5+bpBHwx4m7PjGDL3ZydDqWFDcgveD9NsPa26ijqDqYP9
+# M+MqlA6cSf52AEMTTXUngS/RSg8HYVrZmpxq
 # SIG # End signature block

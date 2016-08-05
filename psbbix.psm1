@@ -184,6 +184,71 @@ function Invoke-Restmethod20 {
 
 }
 
+Function Get-ZabbixCreditentials {
+    <#
+    .Synopsis
+		Get zabbix creditentials
+	.Description
+		Get zabbix creditentials
+    .Parameter Username
+        Username to connect with
+    .Parameter PasswordFilePath
+        Password file to use. NB! Password file can be opened only one same machine and by account it was reated. Either PasswordFilePath or Password is needed if PSCreditential is not used
+    .Parameter Password
+        Password in plain text. Either PasswordFilePath or Password is needed if PSCreditential is not used
+	.Parameter PSCredential
+		Credential. Either Username and (Password|PasswordFilePath) or PSCreditential is required
+
+    #>
+    [CmdletBinding()]
+    Param (        
+        [string]$Username,
+        [string]$PasswordFilePath, 
+        [string]$Password,   
+        [System.Management.Automation.PSCredential]$PSCredential
+    )
+    # credidentials
+    # http://stackoverflow.com/questions/6239647/using-powershell-credentials-without-being-prompted-for-a-password
+    $cred = $null
+
+    if ($PSCredential -ne $null) {
+        Write-Verbose "Using provided Creditentials"
+        $cred = $PSCredential
+
+    } else {
+        $spassword = $null
+
+        if  ($PasswordFilePath -ne $null -and $PasswordFilePath -ne "" )  {
+            if (-not (Test-Path $passwordFilePath))  {
+                throw "Could not find file $PasswordFilePath"                    
+            }
+            Try {
+                $spassword = cat $PasswordFilePath | convertto-securestring -ErrorAction Stop
+            }
+            Catch {
+                    
+                throw "Cannot proceed without opening password file. Create one using read-host -assecurestring | convertfrom-securestring | out-file filename"                    
+            } 
+        
+        } else {
+            if ($Password -ne $null -and $Password -ne "") {
+                $spassword = ConvertTo-SecureString $Password -AsPlainText -Force
+            } else {
+                throw "Either -PSCredential or (-Username and -Password | -PasswordFilePath ) must be specified!"                    
+            }
+        }
+
+        if ($Username -eq "") {
+            throw "Either -PSCredential or (-Username and -Password | -passwordFilePath ) must be specified!"                
+        }
+    
+        $cred = new-object -typename System.Management.Automation.PSCredential -argumentlist $Username, $spassword
+
+
+    }
+    return $cred
+}
+
 
 Function New-ZabbixSession {
 	
@@ -408,7 +473,7 @@ Function Get-ZabbixAgentHostname {
     $computername = $env:COMPUTERNAME
 
     $ipdata = Get-WmiObject -Class Win32_NetworkAdapterConfiguration -Filter IPEnabled=TRUE -ComputerName . | ? {$_.DefaultIPGateway -ne $null } | select IPAddress,DNSDomain
-    $ip = $ipdata.IPAddress
+    $ip = $ipdata.IPAddress[0]
 
     $objIPProperties = [System.Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties()
 
@@ -916,9 +981,9 @@ Function New-ZabbixHost {
 					dns = $DNSName
 					port = $Port
 				}
-				groups = @{
-				    groupid = $GroupID
-				}
+				groups = @(
+				    @{groupid = $GroupID }
+				)
 				status = $Status
 				templates = @(
 					@{templateid = $TemplateID[0]}
@@ -3156,8 +3221,8 @@ Function Save-ZabbixGraph {
 # SIG # Begin signature block
 # MIINNwYJKoZIhvcNAQcCoIINKDCCDSQCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUFK2mL62DPLDXupIV/TJfsjK8
-# sZagggqTMIIFFzCCA/+gAwIBAgITLQAAAvZBJVsiSnHa3wAAAAAC9jANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUcYe++4fG9CwJavOc45t1+WKQ
+# XEugggqTMIIFFzCCA/+gAwIBAgITLQAAAvZBJVsiSnHa3wAAAAAC9jANBgkqhkiG
 # 9w0BAQsFADBWMRQwEgYKCZImiZPyLGQBGRYEc2lzZTEZMBcGCgmSJomT8ixkARkW
 # CW50c2VydmVyMjEjMCEGA1UEAxMaQVMgVGFsbGlubmEgVmVzaSBPbmxpbmUgQ0Ew
 # HhcNMTYwMzE0MTIzMDQyWhcNMjEwMzEzMTIzMDQyWjBxMRQwEgYKCZImiZPyLGQB
@@ -3218,11 +3283,11 @@ Function Save-ZabbixGraph {
 # BAMTGkFTIFRhbGxpbm5hIFZlc2kgT25saW5lIENBAhMtAAAC9kElWyJKcdrfAAAA
 # AAL2MAkGBSsOAwIaBQCgeDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqG
 # SIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3
-# AgEVMCMGCSqGSIb3DQEJBDEWBBRVpnUo8IypN7O2uJ2TyKB/16i/FDANBgkqhkiG
-# 9w0BAQEFAASCAQBvtfyezmCK2NLUt3cP3e1cIRDaXPj8pNpqFFUfmhdg4XR6iQxX
-# szL8chfSWD7qw8rSwhCF6FRauchgD4gYiOnSTZLFijBcKVo3BTN26Ky6fAo4TMtN
-# 3ABo1Y5rkb8jVd5AXelpRfj35Q34KjOdv+oNwXjzjlank9YcgocDoPn6edRO/xDn
-# sytqLgNha8c3JTx94WsoUFK3QLWoemvVZn6lcHruagZ1uxoo+pIxqBoJl2D0FiB/
-# n8ycCq9nLL5/NKoEEtY5spfpUi+Dv85hPrRTQwC4N4G9yrFpgeBYHC37NmU/wlyF
-# HSN6IgeAO0ElLm2BZZ3Ka/NeDGnT1ZmlWIHV
+# AgEVMCMGCSqGSIb3DQEJBDEWBBSbUJqf9cOow78xQKcsaRRT3+An1jANBgkqhkiG
+# 9w0BAQEFAASCAQAOhoD0C8aERd7JVFjNk7VkWC4K88eGgv4wbtc0zzETuBEtv3De
+# 470lqOTjf5EjqkUBrR5qzehV7pRl+M/aZ4hjju6WucQCmFt0kAiiJ9ESBTGJuxIj
+# nUOHByNhbe8ZzeugIi6Vhr+KXeofmfscvwL/LqPCdYYlJ3kOXllH8Yk85xVTVGsD
+# KhdOWCBPliZ2vHQzfpfBY+39DGL7v7skclV3sxVyZKbh4tGE2VpD1zBEiCDjM/9K
+# k86NltK9J/zL7M0YE9hbezsqemS0CTcAJKB3Q0qBnOXDK8vEXp9KZ0liuUg0SmNG
+# 0IX7Rjs6wowIQm5/P5NWlN3tvp8gmxkVTSFz
 # SIG # End signature block

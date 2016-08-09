@@ -700,7 +700,7 @@ function Install-ZabbixAgent {
     #create agent directory if it doesn't exists
     if (!(Test-Path -Path $zabbixDir))
     {
-        New-Item $zabbixDir -ItemType Directory
+        New-Item $zabbixDir -ItemType Directory | out-null
     }
 
 
@@ -708,6 +708,12 @@ function Install-ZabbixAgent {
     Copy-Item "$zabbixInstallDir\bin" $zabbixDir -Recurse -Force | out-null
 
     Copy-Item "$zabbixInstallDir\conf" $zabbixDir -Recurse -Force | out-null
+    
+    $zabbixScriptDir = $zabbixInstallDir+"\scripts"
+
+    if ((Test-Path -Path $zabbixScriptDir)) {
+        Copy-Item $zabbixScriptDir $zabbixDir -Recurse -Force | out-null
+    }
 
 
     # Default Zabbix client folder structure is expected 
@@ -738,7 +744,7 @@ function Install-ZabbixAgent {
     #create agent directory if it doesn't exists
     if (!(Test-Path -Path $newZabbixLogDir))
     {
-        New-Item $newZabbixLogDir -ItemType Directory
+        New-Item $newZabbixLogDir -ItemType Directory | out-null
     }
 
 
@@ -3221,8 +3227,8 @@ Function Save-ZabbixGraph {
 # SIG # Begin signature block
 # MIINNwYJKoZIhvcNAQcCoIINKDCCDSQCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUcYe++4fG9CwJavOc45t1+WKQ
-# XEugggqTMIIFFzCCA/+gAwIBAgITLQAAAvZBJVsiSnHa3wAAAAAC9jANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU+qqgCpfrTleGIwgTgm80CDwf
+# zMGgggqTMIIFFzCCA/+gAwIBAgITLQAAAvZBJVsiSnHa3wAAAAAC9jANBgkqhkiG
 # 9w0BAQsFADBWMRQwEgYKCZImiZPyLGQBGRYEc2lzZTEZMBcGCgmSJomT8ixkARkW
 # CW50c2VydmVyMjEjMCEGA1UEAxMaQVMgVGFsbGlubmEgVmVzaSBPbmxpbmUgQ0Ew
 # HhcNMTYwMzE0MTIzMDQyWhcNMjEwMzEzMTIzMDQyWjBxMRQwEgYKCZImiZPyLGQB
@@ -3283,11 +3289,11 @@ Function Save-ZabbixGraph {
 # BAMTGkFTIFRhbGxpbm5hIFZlc2kgT25saW5lIENBAhMtAAAC9kElWyJKcdrfAAAA
 # AAL2MAkGBSsOAwIaBQCgeDAYBgorBgEEAYI3AgEMMQowCKACgAChAoAAMBkGCSqG
 # SIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3
-# AgEVMCMGCSqGSIb3DQEJBDEWBBSbUJqf9cOow78xQKcsaRRT3+An1jANBgkqhkiG
-# 9w0BAQEFAASCAQAOhoD0C8aERd7JVFjNk7VkWC4K88eGgv4wbtc0zzETuBEtv3De
-# 470lqOTjf5EjqkUBrR5qzehV7pRl+M/aZ4hjju6WucQCmFt0kAiiJ9ESBTGJuxIj
-# nUOHByNhbe8ZzeugIi6Vhr+KXeofmfscvwL/LqPCdYYlJ3kOXllH8Yk85xVTVGsD
-# KhdOWCBPliZ2vHQzfpfBY+39DGL7v7skclV3sxVyZKbh4tGE2VpD1zBEiCDjM/9K
-# k86NltK9J/zL7M0YE9hbezsqemS0CTcAJKB3Q0qBnOXDK8vEXp9KZ0liuUg0SmNG
-# 0IX7Rjs6wowIQm5/P5NWlN3tvp8gmxkVTSFz
+# AgEVMCMGCSqGSIb3DQEJBDEWBBTQrDZTQUJ97UQh4nQjT3a1ZhszXjANBgkqhkiG
+# 9w0BAQEFAASCAQCR47NGzy+ZlkMnd14Nkhv85EERpZ/DDjumDRf6awLICpg6rqHF
+# PM2WNidsl7MoYMcANnHfBVw5B/jEshtlG2Cx61yVWc7n69C9tQP2CHfbMOKW6xwz
+# q/hHO+IXr2eE/DQc0eACaGf47XTKwqKc0hCnmYguiEWyUVsb72yf08awsoNBPGoW
+# O7Ulg0rkDhxJoYdE7bjfCsRpKl5yegTLV/C8uQe1Z5lw2WOnjkvaj+ON1STFYiPS
+# 2QNglv03mSVZYkmRCD+kcIZeDtYumtqrWCHKzNZMvJ9h+IA/D5rrtv8scPre75tu
+# DjTQT0izRQJFT/eAen3WuSdgj4XjV84TaEzm
 # SIG # End signature block

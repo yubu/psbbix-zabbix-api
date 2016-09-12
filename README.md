@@ -17,7 +17,7 @@ Powershell Module for Zabbix API
 Be careful. Especially with mass delete and mass update. 
 Bugs happen. Use on your own risk.
 
-### Installation
+### Installation from Github
 1. download repository zip.
 2. mkdir $env:userprofile\Documents\WindowsPowerShell\Modules\psbbix
 3. copy all files to $env:userprofile\Documents\WindowsPowerShell\Modules\psbbix
@@ -26,6 +26,9 @@ Bugs happen. Use on your own risk.
 .  $env:userprofile\Documents\WindowsPowerShell\Modules\psbbix\epoch-time-convert.ps1
 import-module $env:userprofile\Documents\WindowsPowerShell\Modules\psbbix\psbbix.psm1
 ```
+### Installation from Powershell Gallery
+1. Install-module psbbix
+
 ### Getting Started
 ##### Use powershell help to get commands and examples
 ```powershell

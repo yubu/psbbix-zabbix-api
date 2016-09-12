@@ -1,5 +1,11 @@
+
+# Load additional libraries
+Push-Location $psScriptRoot
+. .\epoch-time-convert.ps1
+. .\zabbix-db-size-calc.ps1
+Pop-Location
+
 Function New-ZabbixSession {
-	
 	<# 
 	.Synopsis
 		Create new Zabbix session

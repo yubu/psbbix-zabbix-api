@@ -5,6 +5,85 @@ Push-Location $psScriptRoot
 . .\zabbix-db-size-calc.ps1
 Pop-Location
 
+function Remove-EmptyLines {
+	<#
+	.Synopsis
+		Remove emprty lines from file, string or variable
+	.Description
+		Remove emprty lines from file, string or variable
+	.Example
+		Remove-EmptyLines -in (gc c:\file.txt)
+	.Example
+		$var | Remove-EmptyLines
+	.Example
+		help -ex Remove-EmptyLines | out-string | Remove-EmptyLines 
+	#>
+	
+	[cmdletbinding()]
+    [Alias("rmel")]
+    param ([parameter(mandatory=$false,position=0,ValueFromPipeline=$true)][array]$in)
+	if (!$psboundparameters.count) {
+		help -ex Remove-EmptyLines | out-string | Remove-EmptyLines
+		return
+	}
+	$in.split("`r`n") | ? {$_.trim() -ne ""}
+}
+
+Function Get-ZabbixHelp {
+	<# 
+	.Synopsis
+		Get fast help for most useful examples for every function with no emty lines
+	.Description
+		Get fast help for most useful examples for every function with no empty lines
+	.Example
+		Get-ZabbixHelp -list
+		Get list of all module functions, like gcm -module psbbix
+	.Example
+		Get-ZabbixHelp -alias
+		Get list of all aliases in the module
+	.Example
+		gzh host
+		Get examples for all zabbixhost commands
+	.Example
+		gzh host -p interface
+		Get all examples with pattern "interface"
+	.Example
+		gzh host -p interface -short
+		Get all examples with pattern "interface", print only matches
+	.Example
+        gzh -zverb get
+		gzh -zverb get -p interface
+        Get examples of all get commands
+    .Example
+		gzh user set
+		Get examples for Get-ZabbixUser
+    .Example
+		gzh host -p step
+		Find step by step guides
+    .Example
+		gzh item -p "cassandra|entropy"
+		Get help for cassandra items if you're using my cassandra cluster template
+	#>
+    
+    [CmdletBinding()]
+    [Alias("gzh")]
+    Param ($znoun,$zverb,[switch]$list,$pattern,[switch]$short,[switch]$alias)
+    
+	if (!(get-module "Find-String")) {Write-Host "`nInstall module Find-String from Powershell Gallery: install-module find-string -force. Unless this function won't work properly.`n" -f yellow; return }
+	if (!$psboundparameters.count) {Get-Help -ex Get-ZabbixHelp | out-string | Remove-EmptyLines; return}
+
+    if ($list) {dir function:\*-zabbix* | select name | sort name}
+	elseif ($alias) {gcm -Module psbbix | %{gal -Definition $_.name -ea 0}}
+    elseif (!$znoun -and $pattern -and $short) {gzh | %{foreach ($i in $_) {$i | Select-String -Pattern $pattern -AllMatches | Out-ColorMatchInfo -onlyShowMatches}}}
+    elseif (!$znoun -and $pattern -and !$short) {gzh | out-string | Select-String -Pattern $pattern -AllMatches | Out-ColorMatchInfo -onlyShowMatches}
+    elseif ($znoun -and $pattern -and !$short) {gzh $znoun | out-string | Select-String -Pattern $pattern -AllMatches | Out-ColorMatchInfo -onlyShowMatches}
+    elseif ($znoun -and $pattern -and $short) {gzh $znoun | %{foreach ($i in $_) {$i | Select-String -Pattern $pattern -AllMatches | Out-ColorMatchInfo -onlyShowMatches}}}
+    elseif ($zverb -and !$znoun) {dir function:\$zverb-zabbix* | %{write-host $_.Name -f yellow; get-help -ex $_.Name | out-string | Remove-EmptyLines}}
+    elseif ($znoun -and !$zverb) {dir function:\*zabbix$znoun | %{write-host $_.Name -f yellow; get-help -ex $_.Name | out-string | Remove-EmptyLines}}
+    elseif ($zverb -and $znoun) {dir function:\$zverb-zabbix$znoun | %{write-host $_.Name -f yellow; get-help -ex $_.Name | out-string | Remove-EmptyLines}}
+    else {dir function:\*zabbix* | %{write-host $_.Name -f yellow; get-help -ex $_.Name | out-string | Remove-EmptyLines}}
+}
+
 Function New-ZabbixSession {
 	<# 
 	.Synopsis
@@ -19,6 +98,9 @@ Function New-ZabbixSession {
 		Connect to Zabbix server with plain http
 	.Example
 		New-ZabbixSession 10.10.10.10
+		Connect to Zabbix server
+	.Example
+		Connect-Zabbix 10.10.10.10
 		Connect to Zabbix server
 	.Example
 		Connect-Zabbix -IPAddress 10.10.10.10 -noSSL
@@ -224,11 +306,14 @@ Function Get-ZabbixHost {
         Get-ZabbixHost @zabSessionParams | ? name -match host | select -ExpandProperty interfaces -Property name | sort name
         Get hosts' interfaces by host name match (case insensitive)        
 	.Example
-		Get-ZabbixHost @zabSessionParams  | ? name -match os | Get-ZabbixTemplate @zabSessionParams | select templateid,name -Unique
+		Get-ZabbixHost @zabSessionParams  | ? name -match host | Get-ZabbixTemplate @zabSessionParams | select templateid,name -Unique
 		Get templates by name match (case insensitive)
 	.Example
 		Get-ZabbixHost @zabSessionParams | ? status -eq 1 | select hostid,name
 		Get only disabled hosts
+	.Example
+		Get-ZabbixHost @zabSessionParams -sortby name | ? name -match host | select hostid,host,status -ExpandProperty httptests
+		Get host(s) by name match (case insensitive), sort by name. Possible values are: hostid, host, name (default), status
 	.Example
 		Get-ZabbixHost @zabSessionParams | ? name -match "" | ? jmx_available -match 1 | select hostid,name
 		Get host(s) with JMX interface(s) active
@@ -246,7 +331,10 @@ Function Get-ZabbixHost {
 		Get Items for the host (HostName is case sensitive)
 	.Example
 		(Get-ZabbixHost @zabSessionParams | ? name -match host).parentTemplates.name
-		Get templates linked to the host by hostname match (case insensitive) 
+		Get templates, linked to the host by hostname match (case insensitive) 
+	.Example
+		Get-ZabbixHost @zabSessionParams | ? name -match hostName | select host -ExpandProperty parentTemplates
+		Get templates, linked to the host(s)
 	.Example
 		Get-ZabbixHost @zabSessionParams | ? parentTemplates -match "jmx" | select name -Unique
 		Get hosts with templates, by template name match
@@ -263,6 +351,9 @@ Function Get-ZabbixHost {
         Get-ZabbixHost @zabSessionParams | ? name -match hostName | select host -ExpandProperty interfaces | ? port -match 10050
         Get interfaces for the host(s)    
     .Example
+		Get-ZabbixHost @zabSessionParams | ? name -match runtime | Get-ZabbixHostInterface @zabSessionParams | ? port -match 10050 | ft -a
+		Get interfaces for the host(s)	
+	.Example
 		Get-ZabbixHost @zabSessionParams | ? name -match hostsName | %{$n=$_.name; Get-ZabbixHostInterface @zabSessionParams -HostID $_.hostid} | select @{n="name";e={$n}},hostid,interfaceid,ip,port | sort name | ft -a
 		Get interface(s) for the host(s)
 	#>
@@ -273,62 +364,69 @@ Function Get-ZabbixHost {
         [array]$HostID,
 		[array]$GroupID,
 		[array]$HttpTestID,
+		[string]$SortBy="name",
 		[Parameter(ValueFromPipelineByPropertyName=$true)][string]$status,
 		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
-    $Body = @{
-	    method = "host.get"
-	    params = @{
-		    output = "extend"
-            selectGroups = @(
-                "groupid",
-                "name"
-            )
-            selectParentTemplates = @(
-                "templateid",
-                "name"
-            )
-            selectInterfaces = @(
-				"interfaceid",
-				"ip",
-				"port"
-            )
-			selectHttpTests = @(
-				"httptestid",
-				"name",
-				"steps"
-			)
-			selectTriggers = @(
-				"triggerid",
-				"description"
-			)
-			
-			filter = @{
-			    host = $HostName
-		    }
-			hostids = $HostID
-			groupids = $GroupID
-			httptestid = $HttpTestID
-	    }
-		
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
-
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
 	
-    try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-        if ($a.result) {$a.result} else {$a.error}
-    } catch {
-        Write-Host "$_"
-        Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
-    }
+	process {
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		$Body = @{
+			method = "host.get"
+			params = @{
+				output = "extend"
+				selectGroups = @(
+					"groupid",
+					"name"
+				)
+				selectParentTemplates = @(
+					"templateid",
+					"name"
+				)
+				selectInterfaces = @(
+					"interfaceid",
+					"ip",
+					"port"
+				)
+				selectHttpTests = @(
+					"httptestid",
+					"name",
+					"steps"
+				)
+				selectTriggers = @(
+					"triggerid",
+					"description"
+				)
+				
+				filter = @{
+					host = $HostName
+				}
+				hostids = $HostID
+				groupids = $GroupID
+				httptestid = $HttpTestID
+			}
+			
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		try {
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+			if ($a.result) {$a.result} else {$a.error}
+		} catch {
+			Write-Host "$_"
+			Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
+		}
+	}
 }
 
 Function New-ZabbixHost {
@@ -371,6 +469,32 @@ Function New-ZabbixHost {
 		Get-ZabbixHost @zabSessionParams | ? name -match NewHost | Get-ZabbixHostInterface @zabSessionParams | %{Set-ZabbixHostInterface @zabSessionParams -IP 10.20.10.10 -InterfaceID $_.interfaceid -Port $_.port -HostID $_.hostid}
 		Get-ZabbixHost @zabSessionParams | ? name -match NewHost | %{$n=$_.name; Get-ZabbixHostInterface @zabSessionParams -HostID $_.hostid} | ft -a @{n="name";e={$n}},hostid,interfaceid,ip,port
 		Clone the host with multiple interfaces, then update interfaces with new IP, then check the interfaces
+	.Example
+		Clone:
+		Get-ZabbixHost @zabSessionParams | ? name -match SourceHost | New-ZabbixHost @zabSessionParams -HostName MewHostname -IP 10.20.10.10 -TemplateID (Get-ZabbixHost @zabSessionParams | ? name -match "SourceHost").parentTemplates.templateid -verbose -interfaces (Get-ZabbixHostInterface @zabSessionParams -HostID (Get-ZabbixHost @zabSessionParams -HostName SourceHost).hostid) -status 1
+		ReplaceIP:
+		Get-ZabbixHost @zabSessionParams | ? name -match SourceHost | Get-ZabbixHostInterface @zabSessionParams | %{Set-ZabbixHostInterface @zabSessionParams -InterfaceID $_.interfaceid -IP 10.20.10.10 -Port $_.port -HostID $_.hostid -main $_.main}
+		Check Interfaces:
+		Get-ZabbixHost @zabSessionParams | ? name -match NewHostName | Get-ZabbixHostInterface @zabSessionParams
+		Remove one of the templates, which will be readded:
+		Get-ZabbixHost @zabSessionParams | ? name -match NewHostName | select hostid,host,status -ExpandProperty parentTemplates | ? name -match someTemplateName | Set-ZabbixHost @zabSessionParams -removeTemplates -Verbose
+		Enable new host:
+		Get-ZabbixHost @zabSessionParams | ? name -match NewHostName | Set-ZabbixHost @zabSessionParams -status 0
+		Check new host:
+		Get-ZabbixHost @zabSessionParams | ? name -match NewHostName | select name,*error*
+		Get-ZabbixHost @zabSessionParams | ? name -match NewHostName | select name,*jmx*
+		Get-ZabbixItem @zabSessionParams -HostId (Get-ZabbixHost @zabSessionParams | ? name -match NewHostName).hostid | ? key_ -match "Version|ProductName|HeapMemoryUsage.used" | ? key_ -notmatch "vmver" | select @{n="lastclock";e={(convertfrom-epoch $_.lastclock).addhours(+1)}},@{n="host";e={$_.hosts.name}},@{n="Application";e={$_.applications.name}},lastvalue,key_ | sort host,application,key_ | ft -a
+		Mark one of default interfaces non default:
+		Get-ZabbixHost @zabSessionParams | ? name -match NewHostName | Get-ZabbixHostInterface @zabSessionParams | ? port -match 31051 | Set-ZabbixHostInterface @zabSessionParams -main 0
+		Mark interface default for the template which will be manually readded:
+		Get-ZabbixHost @zabSessionParams | ? name -match NewHostName | Get-ZabbixHostInterface @zabSessionParams | ? port -match 31021 | Set-ZabbixHostInterface @zabSessionParams -main 1
+		Manually readd removed template 
+		Check whether template works:
+		Get-ZabbixItem @zabSessionParams -HostId (Get-ZabbixHost @zabSessionParams | ? name -match NewHostName).hostid | ? key_ -match "Version|ProductName|HeapMemoryUsage.used" | ? key_ -notmatch "vmver" | select @{n="lastclock";e={(convertfrom-epoch $_.lastclock).addhours(+1)}},@{n="host";e={$_.hosts.name}},@{n="Application";e={$_.applications.name}},lastvalue,key_ | sort host,application,key_ | ft -a
+
+		Clone host with multiple JMX interfaces, step by step. May not be comatible wit your environment.
+		In this scenario we clone host with multiple JMX interfaces. To each JMX interface will be linked specific to this interface JMX template.
+		It can be done only if we will link JMX template to the interface, marked default (-main 1)   
 	#>
 	
     [CmdletBinding()]
@@ -392,100 +516,106 @@ Function New-ZabbixHost {
         [Switch]$MonitorByDNSName
     )
 
-    Switch ($MonitorByDNSName.IsPresent) {
-        $False {$ByDNSName = 1} # = ByIP
-        $True {$ByDNSName = 0} # = ByDomainName
-    }
-    
-	if ($TemplateID.count -gt 5) {write-host "`nOnly up to 5 templates are allowed." -f red -b yellow; return} 
-	
-    if ($GroupID) {
-		$Body = @{
-			method = "host.create"
-			params = @{
-				host = $HostName
-				interfaces = @{
-					type = 1
-					main = 1
-					useip = $ByDNSName
-					ip = $IP
-					dns = $DNSName
-					port = $Port
-				}
-				groups = @{
-				    groupid = $GroupID
-				}
-				status = $Status
-				templates = @(
-					@{templateid = $TemplateID[0]}
-					@{templateid = $TemplateID[1]}
-					@{templateid = $TemplateID[2]}
-					@{templateid = $TemplateID[3]}
-					@{templateid = $TemplateID[4]}
-				)
-			}
-			
-			jsonrpc = $jsonrpc
-			auth = $session
-			id = $id
+    process {
+
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		Switch ($MonitorByDNSName.IsPresent) {
+			$False {$ByDNSName = 1} # = ByIP
+			$True {$ByDNSName = 0} # = ByDomainName
 		}
-	}
-	elseif ($interfaces) {
-		$Body = @{
-			method = "host.create"
-			params = @{
-				host = $HostName
-				interfaces = $Interfaces
-				groups = $Groups
-				status = $Status
-				templates = @(
-					@{templateid = $TemplateID[0]}
-					@{templateid = $TemplateID[1]}
-					@{templateid = $TemplateID[2]}
-					@{templateid = $TemplateID[3]}
-					@{templateid = $TemplateID[4]}
-				)
-			}
-			
-			jsonrpc = $jsonrpc
-			auth = $session
-			id = $id
-		}
-	}
-	else {
-		$Body = @{
-			method = "host.create"
-			params = @{
-				host = $HostName
-				interfaces = @{
-					type = 1
-					main = 1
-					useip = $ByDNSName
-					ip = $IP
-					dns = $DNSName
-					port = $Port
+		
+		if ($TemplateID.count -gt 5) {write-host "`nOnly up to 5 templates are allowed." -f red -b yellow; return} 
+		
+		if ($GroupID) {
+			$Body = @{
+				method = "host.create"
+				params = @{
+					host = $HostName
+					interfaces = @{
+						type = 1
+						main = 1
+						useip = $ByDNSName
+						ip = $IP
+						dns = $DNSName
+						port = $Port
+					}
+					groups = @{
+						groupid = $GroupID
+					}
+					status = $Status
+					templates = @(
+						@{templateid = $TemplateID[0]}
+						@{templateid = $TemplateID[1]}
+						@{templateid = $TemplateID[2]}
+						@{templateid = $TemplateID[3]}
+						@{templateid = $TemplateID[4]}
+					)
 				}
-				groups = $groups
-				status = $Status
-				templates = @(
-					@{templateid = $TemplateID[0]}
-					@{templateid = $TemplateID[1]}
-					@{templateid = $TemplateID[2]}
-					@{templateid = $TemplateID[3]}
-					@{templateid = $TemplateID[4]}
-				)
+				
+				jsonrpc = $jsonrpc
+				auth = $session
+				id = $id
 			}
-			
-			jsonrpc = $jsonrpc
-			auth = $session
-			id = $id
 		}
+		elseif ($interfaces) {
+			$Body = @{
+				method = "host.create"
+				params = @{
+					host = $HostName
+					interfaces = $Interfaces
+					groups = $Groups
+					status = $Status
+					templates = @(
+						@{templateid = $TemplateID[0]}
+						@{templateid = $TemplateID[1]}
+						@{templateid = $TemplateID[2]}
+						@{templateid = $TemplateID[3]}
+						@{templateid = $TemplateID[4]}
+					)
+				}
+				
+				jsonrpc = $jsonrpc
+				auth = $session
+				id = $id
+			}
+		}
+		else {
+			$Body = @{
+				method = "host.create"
+				params = @{
+					host = $HostName
+					interfaces = @{
+						type = 1
+						main = 1
+						useip = $ByDNSName
+						ip = $IP
+						dns = $DNSName
+						port = $Port
+					}
+					groups = $groups
+					status = $Status
+					templates = @(
+						@{templateid = $TemplateID[0]}
+						@{templateid = $TemplateID[1]}
+						@{templateid = $TemplateID[2]}
+						@{templateid = $TemplateID[3]}
+						@{templateid = $TemplateID[4]}
+					)
+				}
+				
+				jsonrpc = $jsonrpc
+				auth = $session
+				id = $id
+			}
+		}
+		$BodyJSON = ConvertTo-Json $Body -Depth 3
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
 	}
-    $BodyJSON = ConvertTo-Json $Body -Depth 3
-    write-verbose $BodyJSON
-	
-	$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-	if ($a.result) {$a.result} else {$a.error}
 }
 
 Function Set-ZabbixHost {
@@ -514,6 +644,12 @@ Function Set-ZabbixHost {
 	.Example
 		(1..9) | %{Get-ZabbixHost @zabSessionParams -HostName "Host0$_" | Set-ZabbixHost @zabSessionParams -TemplateID ((Get-ZabbixHost @zabSessionParams | ? name -match "sourcehost").parenttemplates.templateid)}
 		Link(add) templates to multiple hosts, according config of other host
+	.Example
+		Get-ZabbixHost @zabSessionParams | ? name -match HostName | select host,hostid,status -ExpandProperty parenttemplates | Set-ZabbixHost @zabSessionParams -removeTemplates
+		Unlink(remove) all templates from host
+	.Example
+		Get-ZabbixHost @zabSessionParams | ? name -match HostName | select hostid,host,status -ExpandProperty parentTemplates | ? name -match TemplateName | Set-ZabbixHost @zabSessionParams -removeTemplates -Verbose
+		Unlink(remove) specific template(s) from the host.
 	#>	 
     
 	[CmdletBinding()]
@@ -533,71 +669,81 @@ Function Set-ZabbixHost {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
     
-	if ($TemplateID.count -gt 5) {write-host "`nOnly up to 5 templates are allowed." -f red -b yellow; return}
+	process {
 	
-	if ($removeTemplates) {
-		$Body = @{
-			method = "host.update"
-			params = @{
-				hostid = $HostID
-				status = $status
-				host = $HostName
-				templates_clear = @(
-					@{templateid = $TemplateID[0]}
-					@{templateid = $TemplateID[1]}
-					@{templateid = $TemplateID[2]}
-					@{templateid = $TemplateID[3]}
-					@{templateid = $TemplateID[4]}
-				)
-			}
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
 
-			jsonrpc = $jsonrpc
-			id = $id
-			auth = $session
-		}
-	}
-	elseif ($TemplateID) { 
-		$Body = @{
-			method = "host.update"
-			params = @{
-				hostid = $HostID
-				status = $status
-				templates = @(
-					@{templateid = $TemplateID[0]}
-					@{templateid = $TemplateID[1]}
-					@{templateid = $TemplateID[2]}
-					@{templateid = $TemplateID[3]}
-					@{templateid = $TemplateID[4]}
-				)
+		if ($TemplateID.count -gt 9) {write-host "`nOnly up to 5 templates are allowed." -f red -b yellow; return}
+		
+		if ($removeTemplates) {
+			$Body = @{
+				method = "host.update"
+				params = @{
+					hostid = $HostID
+					status = $status
+					host = $HostName
+					templates_clear = @(
+						@{templateid = $TemplateID[0]}
+						@{templateid = $TemplateID[1]}
+						@{templateid = $TemplateID[2]}
+						@{templateid = $TemplateID[3]}
+						@{templateid = $TemplateID[4]}
+						@{templateid = $TemplateID[5]}
+						@{templateid = $TemplateID[6]}
+						@{templateid = $TemplateID[7]}
+						@{templateid = $TemplateID[8]}
+					)
+				}
+
+				jsonrpc = $jsonrpc
+				id = $id
+				auth = $session
 			}
-			
-			jsonrpc = $jsonrpc
-			id = $id
-			auth = $session
 		}
-	}
-	else {
-		$Body = @{
-			method = "host.update"
-			params = @{
-				hostid = $HostID
-				status = $status
-				parenttemplates = $parenttemplates
-				proxy_hostid = $proxy_hostid
+		elseif ($TemplateID) { 
+			$Body = @{
+				method = "host.update"
+				params = @{
+					hostid = $HostID
+					status = $status
+					templates = @(
+						@{templateid = $TemplateID[0]}
+						@{templateid = $TemplateID[1]}
+						@{templateid = $TemplateID[2]}
+						@{templateid = $TemplateID[3]}
+						@{templateid = $TemplateID[4]}
+					)
+				}
+				
+				jsonrpc = $jsonrpc
+				id = $id
+				auth = $session
 			}
-			
-			jsonrpc = $jsonrpc
-			id = $id
-			auth = $session
 		}
-	
+		else {
+			$Body = @{
+				method = "host.update"
+				params = @{
+					hostid = $HostID
+					status = $status
+					parenttemplates = $parenttemplates
+					proxy_hostid = $proxy_hostid
+				}
+				
+				jsonrpc = $jsonrpc
+				id = $id
+				auth = $session
+			}
+		
+		}
+		
+		$BodyJSON = ConvertTo-Json $Body -Depth 3
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
 	}
-	
-    $BodyJSON = ConvertTo-Json $Body -Depth 3
-	write-verbose $BodyJSON
-	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-    if ($a.result) {$a.result} else {$a.error}
 }
 
 Function Remove-ZabbixHost {
@@ -629,6 +775,9 @@ Function Remove-ZabbixHost {
 	.Example
 		Get-ZabbixHost @zabSessionParams | ? name -match "HostName-0[1-8]" | %{Remove-ZabbixHost @zabSessionParams -HostID $_.hostid}
 		Delete multiple hosts 
+	.Example
+		Get-ZabbixHost @zabSessionParams | ? name -match HostName | Remove-ZabbixHost @zabSessionParams
+		Remove multiple hosts
 	#>
 	
     [CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
@@ -640,24 +789,29 @@ Function Remove-ZabbixHost {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
 	
-    $Body = @{
-	    method = "host.delete"
-	    params = @($HostID)
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
-	
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
-    
-	if ([bool]$WhatIfPreference.IsPresent) {
+    process {
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		$Body = @{
+			method = "host.delete"
+			params = @($HostID)
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+		
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		if ([bool]$WhatIfPreference.IsPresent) {
+		}
+		if ($PSCmdlet.ShouldProcess($HostID,"Delete")){  
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		}
+		
+		if ($a.result) {$a.result} else {$a.error}
 	}
-	if ($PSCmdlet.ShouldProcess($HostID,"Delete")){  
-		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-	}
-	
-	if ($a.result) {$a.result} else {$a.error}
  }
 
 Function Get-ZabbixTemplate {
@@ -689,35 +843,46 @@ Function Get-ZabbixTemplate {
     
 	[CmdletBinding()]
 	Param (
-        $TemplateName,
-        $TemplateID,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplaeName,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$HostID,
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
-    $Body = @{
-	    method = "template.get"
-	    params = @{
-		    output = "extend"
-		    selectHosts = "extend"
-		    filter = @{
-			    host = $TemplateName
-		    }
-            templateids = $TemplateID
-			hostids = $HostID
-	    }
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
+   
+	process {
 
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
-	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-	if ($a.result) {$a.result} else {$a.error}
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		$Body = @{
+			method = "template.get"
+			params = @{
+				output = "extend"
+				selectHosts = "extend"
+				filter = @{
+					host = $TemplateName
+				}
+				templateids = $TemplateID
+				hostids = $HostID
+			}
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		try {
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+			if ($a.result) {$a.result} else {$a.error}
+		} catch {
+			Write-Host "$_"
+			Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
+		}
+	}
 }
 
 Function Get-ZabbixMaintenance {
@@ -777,34 +942,41 @@ Function Get-ZabbixMaintenance {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
-    $Body = @{
-	    method = "maintenance.get"
-	    params = @{
-		    output = "extend"
-            selectGroups = "extend"
-            selectHosts = "extend"
-            selectTimeperiods = "extend"
-            filter = @{
-			    name = $MaintenanceName
-		    }
-			maintenanceids = $MaintenanceID
+    
+	process {
+
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+		
+		$Body = @{
+			method = "maintenance.get"
+			params = @{
+				output = "extend"
+				selectGroups = "extend"
+				selectHosts = "extend"
+				selectTimeperiods = "extend"
+				filter = @{
+					name = $MaintenanceName
+				}
+				maintenanceids = $MaintenanceID
+			}
+
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
 		}
 
-		jsonrpc = $jsonrpc
-		id = $id
-		auth = $session
-    }
-
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
-	
-    try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-        if ($a.result) {$a.result} else {$a.error}
-    } catch {
-        Write-Host "$_"
-        Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
-    }
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		try {
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+			if ($a.result) {$a.result} else {$a.error}
+		} catch {
+			Write-Host "$_"
+			Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
+		}
+	}
 }
 
 Function New-ZabbixMaintenance {
@@ -871,64 +1043,70 @@ Function New-ZabbixMaintenance {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
     
-	if (!($GroupID -or $HostID)) {write-host "`nYou need to provide GroupID or HostID as parameter`n" -f red; return}
-	
-	if ($GroupID) {
-		$Body = @{
-			method = "maintenance.create"
-			params = @{
-				name = $MaintenanceName
-				description = $MaintenanceDescription
-				active_since = $ActiveSince
-				active_till = $ActiveTill
-				maintenance_type = $MaintenanceType
-				timeperiods = @(
-					@{
-						timeperiod_type = $TimeperiodType
-						#start_time = $TimeperiodStartTime
-						start_date = $TimeperiodStartDate
-						period = $TimeperiodPeriod
-					}
-				)
-				groupids = @($groupid)
+	process {
+
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		if (!($GroupID -or $HostID)) {write-host "`nYou need to provide GroupID or HostID as parameter`n" -f red; return}
+		
+		if ($GroupID) {
+			$Body = @{
+				method = "maintenance.create"
+				params = @{
+					name = $MaintenanceName
+					description = $MaintenanceDescription
+					active_since = $ActiveSince
+					active_till = $ActiveTill
+					maintenance_type = $MaintenanceType
+					timeperiods = @(
+						@{
+							timeperiod_type = $TimeperiodType
+							#start_time = $TimeperiodStartTime
+							start_date = $TimeperiodStartDate
+							period = $TimeperiodPeriod
+						}
+					)
+					groupids = @($groupid)
+				}
+				
+				jsonrpc = $jsonrpc
+				id = $id
+				auth = $session
 			}
-			
-			jsonrpc = $jsonrpc
-			id = $id
-			auth = $session
 		}
-	}
-	if ($HostID) {
-		$Body = @{
-			method = "maintenance.create"
-			params = @{
-				name = $MaintenanceName
-				description = $MaintenanceDescription
-				active_since = $ActiveSince
-				active_till = $ActiveTill
-				maintenance_type = $MaintenanceType
-				timeperiods = @(
-					@{
-						timeperiod_type = $TimeperiodType
-						start_date = $TimeperiodStartDate
-						#start_time = $TimeperiodStartTime
-						period = $TimeperiodPeriod
-					}
-				)
-				hostids = @($hostid)
+		if ($HostID) {
+			$Body = @{
+				method = "maintenance.create"
+				params = @{
+					name = $MaintenanceName
+					description = $MaintenanceDescription
+					active_since = $ActiveSince
+					active_till = $ActiveTill
+					maintenance_type = $MaintenanceType
+					timeperiods = @(
+						@{
+							timeperiod_type = $TimeperiodType
+							start_date = $TimeperiodStartDate
+							#start_time = $TimeperiodStartTime
+							period = $TimeperiodPeriod
+						}
+					)
+					hostids = @($hostid)
+				}
+				
+				jsonrpc = $jsonrpc
+				id = $id
+				auth = $session
 			}
-			
-			jsonrpc = $jsonrpc
-			id = $id
-			auth = $session
 		}
+		
+		$BodyJSON = ConvertTo-Json $Body -Depth 4
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
 	}
-    
-	$BodyJSON = ConvertTo-Json $Body -Depth 4
-	write-verbose $BodyJSON
-    
-	$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-    if ($a.result) {$a.result} else {$a.error}
  }
 
 Function Remove-ZabbixMaintenance {
@@ -961,25 +1139,32 @@ Function Remove-ZabbixMaintenance {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
-     $Body = @{
-	    method = "maintenance.delete"
-	    params = @($MaintenanceID)
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
-	
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
-	
-    
-	if ([bool]$WhatIfPreference.IsPresent) {
+     
+	process {
+
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+		
+		$Body = @{
+			method = "maintenance.delete"
+			params = @($MaintenanceID)
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+		
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		
+		if ([bool]$WhatIfPreference.IsPresent) {
+		}
+		if ($PSCmdlet.ShouldProcess($HostID,"Delete")){  
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		}
+		
+		if ($a.result) {$a.result} else {$a.error}
 	}
-	if ($PSCmdlet.ShouldProcess($HostID,"Delete")){  
-		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-	}
-	
-	if ($a.result) {$a.result} else {$a.error}
  }
  
 Function Export-ZabbixConfig {
@@ -1021,6 +1206,10 @@ Function Export-ZabbixConfig {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
 	
+	process {
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"	
+		
 		$Body = @{
 		method = "configuration.export"
 		params = @{
@@ -1037,11 +1226,12 @@ Function Export-ZabbixConfig {
 		auth = $session
 		}
 
-    $BodyJSON = ConvertTo-Json $Body -Depth 3
-	write-verbose $BodyJSON
-	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-    if ($a.result) {$a.result} else {$a.error}
+		$BodyJSON = ConvertTo-Json $Body -Depth 3
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
+	}
 }
 
 Function Get-ZabbixAlert { 
@@ -1160,6 +1350,9 @@ Function Get-ZabbixUser {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
+	$boundparams=$PSBoundParameters | out-string
+	write-verbose "($boundparams)"
+
 	$Body = @{
 	    method = "user.get"
 	    params = @{
@@ -1198,6 +1391,9 @@ Function Remove-ZabbixUser {
 		Get-ZabbixUser @zabSessionParams | ? alias -eq "alias" | Remove-ZabbixUser @zabSessionParams -WhatIf
 		Delete one user
 	.Example
+		Get-ZabbixUser @zabSessionParams | ? alias -match "alias"  | Remove-ZabbixUser @zabSessionParams
+		Remove users by alias match
+	.Example
 		Remove-ZabbixUser @zabSessionParams -UserID (Get-ZabbixUser @zabSessionParams | ? alias -match "alias").userid
 		Delete multiple users by alias match
 	#>
@@ -1211,24 +1407,29 @@ Function Remove-ZabbixUser {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
-	$Body = @{
-	    method = "user.delete"
-	    params = @($UserID)
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
+	process {
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
 
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
-	
-	if ([bool]$WhatIfPreference.IsPresent) {
+		$Body = @{
+			method = "user.delete"
+			params = @($UserID)
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		if ([bool]$WhatIfPreference.IsPresent) {
+		}
+		if ($PSCmdlet.ShouldProcess($UserID,"Delete")){  
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		}
+		
+		if ($a.result) {$a.result} else {$a.error}
 	}
-	if ($PSCmdlet.ShouldProcess($UserID,"Delete")){  
-		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-	}
-	
-    if ($a.result) {$a.result} else {$a.error}
 }
 
 Function Set-ZabbixUser { 
@@ -1243,6 +1444,9 @@ Function Set-ZabbixUser {
 	.Example
 		Get-Zabbixuser @zabSessionParams | ? alias -match "alias" | Set-ZabbixUser @zabSessionParams -usrgrps (Get-ZabbixUserGroup @zabSessionParams | ? name -match disable).usrgrpid
 		Disable user (by moving him to usrgrp Disabled)
+	.Example
+		Get-ZabbixUser @zabSessionParams -getAccess | ? alias -match "user" | Set-ZabbixUser @zabSessionParams -type 1 -Verbose
+		Set user type (Zabbix User - 1, Zabbix Admin - 2, Zabbix Super Admin - 3 )
 	#>	
 	
 	[cmdletbinding()]
@@ -1252,6 +1456,8 @@ Function Set-ZabbixUser {
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Alias,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Passwd,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$sendto,
+		#user types: 1:Zabbix User,2:Zabbix Admin,3:Zabbix Super Admin 
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$type,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$usrgrps,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$medias,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$rows_per_page,
@@ -1265,30 +1471,36 @@ Function Set-ZabbixUser {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
-	$Body = @{
-		method = "user.update"
-		params = @{
-			userid = $UserID
-			name = $Name
-			surname = $Surname
-			alias = $Alias
-			passwd = $Passwd
-			usrgrps = $usrgrps
-			rows_per_page = $Rows_Per_Page
-			medias = $medias
+	process {
+	
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		$Body = @{
+			method = "user.update"
+			params = @{
+				userid = $UserID
+				name = $Name
+				surname = $Surname
+				alias = $Alias
+				passwd = $Passwd
+				usrgrps = $usrgrps
+				rows_per_page = $Rows_Per_Page
+				medias = $medias
+			}
+			
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
 		}
 		
-		jsonrpc = $jsonrpc
-		id = $id
-		auth = $session
+		
+		$BodyJSON = ConvertTo-Json $Body -Depth 3
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
 	}
-	
-	
-    $BodyJSON = ConvertTo-Json $Body -Depth 3
-	write-verbose $BodyJSON
-	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-    if ($a.result) {$a.result} else {$a.error}
 }
 
 Function New-ZabbixUser { 
@@ -1335,63 +1547,68 @@ Function New-ZabbixUser {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
+	process {
 	
-	if (!$sendto -or !$MediaActive) {
-		$Body = @{
-			method = "user.create"
-			params = @{
-				name = $name
-				surname = $surname
-				alias = $alias
-				passwd = $passwd
-				usrgrps = $usrgrps
-				rows_per_page = $rows_per_page
-				refresh = $refresh
-				getAccess = $getAccess
-				medias = $medias
-				mediatypes = $mediaTypes
-			}
-			
-			jsonrpc = $jsonrpc
-			id = $id
-			auth = $session
-		}
-	}
-	else {
-		$Body = @{
-			method = "user.create"
-			params = @{
-				name = $name
-				surname = $surname
-				alias = $alias
-				passwd = $passwd
-				usrgrps = $usrgrps
-				rows_per_page = $rows_per_page
-				refresh = $refresh
-				getAccess = $getAccess
-				user_medias = @(
-					@{
-						#mediaid = "1"
-						mediatypeid = "1"
-						sendto = $Sendto
-						active = $MediaActive
-						severity = $Severity
-						period = $Period
-					}
-				)
-			}
-		
-			jsonrpc = $jsonrpc
-			id = $id
-			auth = $session
-		}
-	}
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
 
-    $BodyJSON = ConvertTo-Json $Body -Depth 3
-	write-verbose $BodyJSON
-	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-    if ($a.result) {$a.result} else {$a.error}
+		if (!$sendto -or !$MediaActive) {
+			$Body = @{
+				method = "user.create"
+				params = @{
+					name = $name
+					surname = $surname
+					alias = $alias
+					passwd = $passwd
+					usrgrps = $usrgrps
+					rows_per_page = $rows_per_page
+					refresh = $refresh
+					getAccess = $getAccess
+					medias = $medias
+					mediatypes = $mediaTypes
+				}
+				
+				jsonrpc = $jsonrpc
+				id = $id
+				auth = $session
+			}
+		}
+		else {
+			$Body = @{
+				method = "user.create"
+				params = @{
+					name = $name
+					surname = $surname
+					alias = $alias
+					passwd = $passwd
+					usrgrps = $usrgrps
+					rows_per_page = $rows_per_page
+					refresh = $refresh
+					getAccess = $getAccess
+					user_medias = @(
+						@{
+							#mediaid = "1"
+							mediatypeid = "1"
+							sendto = $Sendto
+							active = $MediaActive
+							severity = $Severity
+							period = $Period
+						}
+					)
+				}
+			
+				jsonrpc = $jsonrpc
+				id = $id
+				auth = $session
+			}
+		}
+
+		$BodyJSON = ConvertTo-Json $Body -Depth 3
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
+	}
 }
 
 Function Get-ZabbixUserGroup { 
@@ -1423,6 +1640,9 @@ Function Get-ZabbixUserGroup {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
+	$boundparams=$PSBoundParameters | out-string
+	write-verbose "($boundparams)"
+
 	$Body = @{
 	    method = "usergroup.get"
 	    params = @{
@@ -1531,10 +1751,13 @@ Function Set-ZabbixTrigger {
 	.Parameter TriggerID
 		TriggerID
 	.Example
+		Get-ZabbixHost @zabSessionParams -HostName HostName | Get-ZabbixTrigger @zabSessionParams -ea silent | ? status -match 0 | ? expression -match "V:,pfree" | Set-ZabbixTrigger @zabSessionParams -status 1 -Verbose
+        Disable trigger
+	.Example
 		Get-ZabbixTrigger @zabSessionParams -TemplateID (Get-zabbixTemplate @zabSessionParams | ? name -match "Template Name").templateid | ? description -match "trigger description" | Set-ZabbixTrigger @zabSessionParams -status 1
 		Disable trigger
 	.Example
-		Get-ZabbixTemplate @zabSessionParams | ? name -match "Template" | Get-ZabbixTrigger @zabSessionParams | ? description -match triggerDescription | set-ZabbixTrigger @zabSessionParams -status 0
+		Get-ZabbixTemplate @zabSessionParams | ? name -match "Template" | Get-ZabbixTrigger @zabSessionParams | ? description -match triggerDescription | Set-ZabbixTrigger @zabSessionParams -status 0
 		Enable trigger
 	#>
 
@@ -1551,24 +1774,31 @@ Function Set-ZabbixTrigger {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
 	
-	$Body = @{
-		method = "trigger.update"
-		params = @{
-			triggerid = $TriggerID
-			status = $status
+	process {
+	
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+
+		$Body = @{
+			method = "trigger.update"
+			params = @{
+				triggerid = $TriggerID
+				status = $status
+			}
+			
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
 		}
 		
-		jsonrpc = $jsonrpc
-		id = $id
-		auth = $session
-	}
-	
 
-    $BodyJSON = ConvertTo-Json $Body
-    write-host $BodyJSON
-	
-	$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-    if ($a.result) {$a.result} else {$a.error}
+		$BodyJSON = ConvertTo-Json $Body
+		write-host $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
+	}
 }
 
 Function Get-ZabbixAction { 
@@ -1583,6 +1813,8 @@ Function Get-ZabbixAction {
 		Get-ZabbixAction @zabSessionParams | select name
 	.Example	
 		Get-ZabbixAction @zabSessionParams | ? name -match action | select name,def_longdata,r_longdata
+	.Example
+		Get-ZabbixAction  @zabSessionParams | ? name -match Prod | select name -ExpandProperty def_longdata	
 	#>
 	[cmdletbinding()]
 	Param (
@@ -1593,30 +1825,36 @@ Function Get-ZabbixAction {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
-	$Body = @{
-	    method = "action.get"
-	    params = @{
-		    output = "extend"
-			selectOperations = "extend"
-			selectFilter = "extend"
-			sortfield = @($sortby)
-	    }
+	process {
 
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
 
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
-	
-    try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-        if ($a.result) {$a.result} else {$a.error}
-    } catch {
-        Write-Host "$_"
-        Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
-    }
+		$Body = @{
+			method = "action.get"
+			params = @{
+				output = "extend"
+				selectOperations = "extend"
+				selectFilter = "extend"
+				sortfield = @($sortby)
+			}
+
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		try {
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+			if ($a.result) {$a.result} else {$a.error}
+		} catch {
+			Write-Host "$_"
+			Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
+		}
+	}
 }
 
 Function Set-ZabbixAction { 
@@ -1641,23 +1879,28 @@ Function Set-ZabbixAction {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
-	$Body = @{
-	    method = "action.update"
-	    params = @{
-		    actionid = $ActionID
-			status = $status
-	    }
+	process {
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
 
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
+		$Body = @{
+			method = "action.update"
+			params = @{
+				actionid = $ActionID
+				status = $status
+			}
 
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
-	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-    if ($a.result) {$a.result} else {$a.error}
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
+	}
 }
 
 Function Get-ZabbixApplication {
@@ -1700,130 +1943,41 @@ Function Get-ZabbixApplication {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
-    $Body = @{
-	    method = "application.get"
-	    params = @{
-		    output = "extend"
-            selectHosts = @(
-                "hostid",
-                "host"
-            )
-			sortfield = "name"
-			hostids = $HostID
-			groupids = $GroupID
-			templateids = $TemplateID
-	    }
+    
+	process {
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+		
+		$Body = @{
+			method = "application.get"
+			params = @{
+				output = "extend"
+				selectHosts = @(
+					"hostid",
+					"host"
+				)
+				sortfield = "name"
+				hostids = $HostID
+				groupids = $GroupID
+				templateids = $TemplateID
+			}
 
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
 
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
-	
-    try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-        if ($a.result) {$a.result} else {$a.error}
-    } catch {
-        Write-Host "$_"
-        Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
-    }
-}
-
-Function Get-ZabbixHostInterface { 
-	<#
-	.Synopsis
-		Get host interface
-	.Description
-		Get host interface
-	.Example
-		Get-ZabbixHostInterface @zabSessionParams -HostID (Get-ZabbixHost @zabSessionParams -HostName ThisHost).hostid
-		Get interface(s) for single host (case sensitive)
-	.Example	
-		Get-ZabbixHostInterface @zabSessionParams -HostID (Get-ZabbixHost @zabSessionParams | ? name -match hostName).hostid
-		Get interface(s) for multiple hosts (case insensitive)
-	.Example	
-		Get-ZabbixHost @zabSessionParams -HostName HostName | Get-ZabbixHostInterface @zabSessionParams
-		Get interface(s) for single host (case sensitive)
-	.Example
-		Get-ZabbixHost @zabSessionParams | ? name -match hostsName | %{$n=$_.name; Get-ZabbixHostInterface @zabSessionParams -HostID $_.hostid} | select @{n="name";e={$n}},hostid,interfaceid,ip,port | sort name | ft -a
-		Get interface(s) for the host(s)
-	#>
-	[cmdletbinding()]
-	Param (
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$HostID,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
-	)
-	
-	$Body = @{
-	    method = "hostinterface.get"
-	    params = @{
-		    output = "extend"
-			hostids = $HostID
-	    }
-
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
-
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
-	
-    try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-        if ($a.result) {$a.result} else {$a.error}
-    } catch {
-        Write-Host "$_"
-        Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
-    }
-}
-
-Function Set-ZabbixHostInterface { 
-	<#
-	.Synopsis
-		Set host interface
-	.Description
-		Set host interface
-	.Example
-		Get-ZabbixHost @zabSessionParams | ? name -match host | Get-ZabbixHostInterface @zabSessionParams | %{Set-ZabbixHostInterface @zabSessionParams -IP 10.20.10.10 -InterfaceID $_.interfaceid -HostID $_.hostid -Port $_.port}
-		Set new IP to multiple host interfaces
-	#>
-	[cmdletbinding()]
-	Param (
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$HostID,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$InterfaceID,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$IP,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Port,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
-	)
-	
-	$Body = @{
-	    method = "hostinterface.update"
-	    params = @{
-			hostid = $HostID
-			interfaceid = $InterfaceID
-			port = $Port
-			ip = $IP
-	    }
-
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
-
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
-	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-    if ($a.result) {$a.result} else {$a.error}
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		try {
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+			if ($a.result) {$a.result} else {$a.error}
+		} catch {
+			Write-Host "$_"
+			Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
+		}
+	}
 }
 
 Function Get-ZabbixHttpTest {
@@ -2181,25 +2335,25 @@ Function Get-ZabbixHostInterface {
 	.Description
 		Get host interface
 	.Example
-		Get-ZabbixHostInterface @zabSessionParams -HostID (Get-ZabbixHost @zabSessionParams -HostName TheseHosts).hostid
-		Get Hosts interfaces
-	.Example	
-		Get-ZabbixHost @zabSessionParams -HostName host-01 | Get-ZabbixHostInterface @zabSessionParams | ft -a
-		Get single host interface information
-	.Example	
-		 Get-ZabbixHostInterface @zabSessionParams -HostID (Get-ZabbixHost @zabSessionParams | ? name -match host).hostid | ft -a
-		 Get multiple hosts interface information
-	.Example
 		Get-ZabbixHostInterface @zabSessionParams -HostID (Get-ZabbixHost @zabSessionParams -HostName ThisHost).hostid
 		Get interface(s) for single host (case sensitive)
 	.Example	
 		Get-ZabbixHostInterface @zabSessionParams -HostID (Get-ZabbixHost @zabSessionParams | ? name -match hostName).hostid
 		Get interface(s) for multiple hosts (case insensitive)
+	.Example
+		Get-ZabbixHost @zabSessionParams -HostName HostName | Get-ZabbixHostInterface @zabSessionParams | ft -a
+		Get interfaces for host
+	.Example	
+		Get-ZabbixHost @zabSessionParams | ? name -match HostName | Get-ZabbixHostInterface @zabSessionParams | ft -a
+		Get interfaces for multiple hosts
+	.Example	
+		Get-ZabbixHost @zabSessionParams | ? name -match HostName | Get-ZabbixHostInterface @zabSessionParams | ? port -match 10050 | ft -a
+		Get interface matching port for multiple hosts
 	.Example	
 		Get-ZabbixHost @zabSessionParams -HostName HostName | Get-ZabbixHostInterface @zabSessionParams
 		Get interface(s) for single host (case sensitive)
 	.Example
-		Get-ZabbixHost @zabSessionParams | ? name -match hostsName | %{$n=$_.name; Get-ZabbixHostInterface @zabSessionParams -HostID $_.hostid} | ft -a @{n="name";e={$n}},hostid,interfaceid,ip,port
+		Get-ZabbixHost @zabSessionParams | ? name -match hostsName | %{$n=$_.name; Get-ZabbixHostInterface @zabSessionParams -HostID $_.hostid} | select @{n="name";e={$n}},hostid,interfaceid,ip,port | sort name | ft -a
 		Get interface(s) for the host(s)
 	#>
 	[cmdletbinding()]
@@ -2211,28 +2365,34 @@ Function Get-ZabbixHostInterface {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
-	$Body = @{
-	    method = "hostinterface.get"
-	    params = @{
-		    output = "extend"
-			hostids = $HostID
-	    }
-
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
-
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
+	process {
 	
-    try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-        if ($a.result) {$a.result} else {$a.error}
-    } catch {
-        Write-Host "$_"
-        Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
-    }
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		$Body = @{
+			method = "hostinterface.get"
+			params = @{
+				output = "extend"
+				hostids = $HostID
+			}
+
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		try {
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+			if ($a.result) {$a.result} else {$a.error}
+		} catch {
+			Write-Host "$_"
+			Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
+		}
+	}
 }
 
 Function Set-ZabbixHostInterface { 
@@ -2242,12 +2402,14 @@ Function Set-ZabbixHostInterface {
 	.Description
 		Set host interface
 	.Example
-		Get-ZabbixHost @zabSessionParams | ? name -match host | Get-ZabbixHostInterface @zabSessionParams | %{Set-ZabbixHostInterface @zabSessionParams -IP 10.20.10.12 -Verbose -InterfaceID $_.interfaceid -HostID $_.hostid -Port $_.port}
-		Modify interface settings for the host
-	.Example	
-		Get-ZabbixHost @zabSessionParams | ? name -match host | Get-ZabbixHostInterface @zabSessionParams | %{Set-ZabbixHostInterface @zabSessionParams -InterfaceID $_.interfaceid -IP 10.20.10.15 -Port $_.port -HostID $_.hostid}
-	.Example	
-		(1..100) | %{Get-ZabbixHost @zabSessionParams | ? name -match "host0$_" | Get-ZabbixHostInterface @zabSessionParams | ? port -match 31721 | Set-ZabbixHostInterface @zabSessionParams -main 1}
+		Get-ZabbixHost @zabSessionParams | ? name -match host | Get-ZabbixHostInterface @zabSessionParams | %{Set-ZabbixHostInterface @zabSessionParams -IP 10.20.10.10 -InterfaceID $_.interfaceid -HostID $_.hostid -Port $_.port}
+		Set new IP to multiple host interfaces
+	.Example
+		Get-ZabbixHost @zabSessionParams | ? name -match host | Get-ZabbixHostInterface @zabSessionParams | ? port -notmatch "10050|31001" | ? main -match 1 | Set-ZabbixHostInterface @zabSessionParams -main 0
+		Set interfaces on multiple hosts to be not default 	
+	.Example
+		Get-ZabbixHost @zabSessionParams | ? name -match host | Get-ZabbixHostInterface @zabSessionParams | ? port -match 31021 | Set-ZabbixHostInterface @zabSessionParams -main 0
+		Set interface matches port 31021 on multiple hosts to default
 	#>
 	[cmdletbinding()]
 	Param (
@@ -2263,27 +2425,33 @@ Function Set-ZabbixHostInterface {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
-	$Body = @{
-	    method = "hostinterface.update"
-	    params = @{
-			hostid = $HostID
-			interfaceid = $InterfaceID
-			port = $Port
-			ip = $IP
-			main = $main
-	    }
+	process {
 
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
 
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
-	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-    if ($a.result) {$a.result} else {$a.error}
+		$Body = @{
+			method = "hostinterface.update"
+			params = @{
+				hostid = $HostID
+				interfaceid = $InterfaceID
+				port = $Port
+				ip = $IP
+			}
+
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
+	}
 }
+
 
 Function New-ZabbixHostInterface { 
 	<#
@@ -2293,18 +2461,33 @@ Function New-ZabbixHostInterface {
 		Create host interface
 	.Example
 		Get-ZabbixHost @zabSessionParams | ? name -match host | New-ZabbixHostInterface @zabSessionParams -IP 10.20.10.15 -port 31721
+		Create new interface for host
 	.Example	
 		Get-ZabbixHost @zabSessionParams | ? name -match "host01" | New-ZabbixHostInterface @zabSessionParams -Port 31721 -type 4 -main 1 -ip (Get-ZabbixHost @zabSessionParams | ? name -match "host01").interfaces.ip
+		Create new interface for host
 	.Example	
-		(1..100) | %{Get-ZabbixHost @zabSessionParams | ? name -match "host0$_" | New-ZabbixHostInterface @zabSessionParams -Port 31702 -type 4 -main 1 -ip (Get-ZabbixHost @zabSessionParams | ? name -match "host0$_").interfaces.ip}
 		(1..100) | %{Get-ZabbixHost @zabSessionParams | ? name -match "host0$_" | New-ZabbixHostInterface @zabSessionParams -Port 31721 -type 4 -main 0 -ip (Get-ZabbixHost @zabSessionParams | ? name -match "host0$_").interfaces.ip[0]}
+		Create new interface for multiple hosts 
 	.Example
 		(1..100) | %{Get-ZabbixHost @zabSessionParams | ? name -match "host0$_" | Get-ZabbixHostInterface @zabSessionParams | ? port -match 31751 | Set-ZabbixHostInterface @zabSessionParams -main 0}
 		Make existing JMX port not default
+	.Example		
 		(1..100) | %{Get-ZabbixHost @zabSessionParams | ? name -match "host0$_" | New-ZabbixHostInterface @zabSessionParams -Port 31771 -type 4 -main 1 -ip (Get-ZabbixHost @zabSessionParams | ? name -match "host0$_").interfaces.ip[0]}
-		Create new JMX connection and set it default
+		Create new JMX interface and set it default
+	.Example	
 		Get-ZabbixItem @zabSessionParams -HostId (Get-ZabbixHost @zabSessionParams | ? name -match "one|two|three|four").hostid | ? key_ -match "version" | ? key_ -notmatch "VmVersion" | ? lastvalue -ne 0 | ? applications -match "app1|app2|app3|app3" | select @{n="host";e={$_.hosts.name}},@{n="Application";e={$_.applications.name}},lastvalue,key_,interfaces | sort host,application | ft -a
 		Check whether new settings are working
+	.Example
+		Get-ZabbixHost @zabSessionParams | ? name -match hostname | Get-ZabbixHostInterface @zabSessionParams | ? port -match 31021 | Set-ZabbixHostInterface @zabSessionParams -main 0
+		Get-ZabbixHost @zabSessionParams | ? name -match hostname | Get-ZabbixHostInterface @zabSessionParams | ? port -match 31021 | ft -a
+		Get-ZabbixHost @zabSessionParams | ? name -match hostname | select hostid,name,@{n="ip";e={$_.interfaces.ip[0]}} | New-ZabbixHostInterface @zabSessionParams -Port 31001 -type 4 -main 1 -verbose
+		Get-ZabbixHost @zabSessionParams | ? name -match hostname | Get-ZabbixHostInterface @zabSessionParams | ft -a
+		Manually add new teplate for created interface 
+		Run the checks: 
+		Get-ZabbixHost @zabSessionParams | ? name -match hostname | select name,*error* | ft -a
+		Get-ZabbixHost @zabSessionParams | ? name -match hostname | select name,*jmx* | ft -a
+		Get-ZabbixItem @zabSessionParams -HostId (Get-ZabbixHost @zabSessionParams | ? name -match hostname).hostid | ? key_ -match "Version|ProductName|HeapMemoryUsage.used" | ? key_ -notmatch "vmver" | select  @{n="lastclock";e={(convertfrom-epoch $_.lastclock).addhours(+1)}},@{n="host";e={$_.hosts.name}},@{n="Application";e={$_.applications.name}},lastvalue,key_ | sort host,application,key_ | ft -a 
+		Add new JMX interface with matching new JMX template, step by step	
 	#>
 	[cmdletbinding()]
 	Param (
@@ -2325,28 +2508,33 @@ Function New-ZabbixHostInterface {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
-	$Body = @{
-	    method = "hostinterface.create"
-	    params = @{
-			hostid = $HostID
-			main = $main
-			dns = $dns
-			port = $Port
-			ip = $IP
-			useip = $useIP
-			type = $type
-	    }
+	process {
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
 
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
+		$Body = @{
+			method = "hostinterface.create"
+			params = @{
+				hostid = $HostID
+				main = $main
+				dns = $dns
+				port = $Port
+				ip = $IP
+				useip = $useIP
+				type = $type
+			}
 
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
-	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-    if ($a.result) {$a.result} else {$a.error}
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
+	}
 }
 
 Function Remove-ZabbixHostInterface { 
@@ -2362,7 +2550,8 @@ Function Remove-ZabbixHostInterface {
 		Remove-ZabbixHostInterface @zabSessionParams -interfaceid (Get-ZabbixHost @zabSessionParams | ? name -match "host02" | Get-ZabbixHostInterface @zabSessionParams).interfaceid
 		Remove all interfaces from host
 	.Example	
-
+		Get-ZabbixHost @zabSessionParams | ? name -match hostName | ? name -notmatch otheHostName | Get-ZabbixHostInterface @zabSessionParams | ? port -match 31021 | Remove-ZabbixHostInterface @zabSessionParams
+		Remove interfaces by port
 	#>
 	[CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
 	Param (
@@ -2374,26 +2563,32 @@ Function Remove-ZabbixHostInterface {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
-	$Body = @{
-	    method = "hostinterface.delete"
-	    params = @($interfaceid)
+	process {
 
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
-	
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
-	
-	if ([bool]$WhatIfPreference.IsPresent) {
-		#$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		$Body = @{
+			method = "hostinterface.delete"
+			params = @($interfaceid)
+
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+		
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		if ([bool]$WhatIfPreference.IsPresent) {
+			#$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		}
+		if ($PSCmdlet.ShouldProcess($HostID,"Delete")){  
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		}
+		
+		if ($a.result) {$a.result} else {$a.error}
 	}
-	if ($PSCmdlet.ShouldProcess($HostID,"Delete")){  
-		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-	}
-	
-    if ($a.result) {$a.result} else {$a.error}
 }
 
 Function Get-ZabbixItem { 
@@ -2445,6 +2640,11 @@ Function Get-ZabbixItem {
 	.Example
 		Get-ZabbixItem @zabSessionParams -HostId (Get-ZabbixHost @zabSessionParams | ? name -match "hostName").hostid | ? key_ -match "HeapMemoryUsage.committed" | ? lastvalue -ne 0 | ? applications -match "application" | select @{n="Time(UTC+1)";e={(convertfrom-epoch $_.lastclock).addhours(+1)}},@{n="host";e={$_.hosts.name}},@{n="Application";e={$_.applications.name}},lastvalue,key_,@{n="If.IP";e={$_.interfaces.ip}},@{n="If.Port";e={$_.interfaces.port}} | sort host | ft -a
 		Get JVM memory usage via JMX
+	.Example
+        Cassandra: Get-ZabbixItem @zabSessionParams -ItemName 'AntiEntropySessions' -HostId (Get-ZabbixHost @zabSessionParams | ? name -match "cassandraNode").hostid | select  @{n="hostname";e={$_.hosts.name}},name,@{e={(convertfrom-epoch $_.lastclock).addhours(+1)};n="Time"},@{n="lastvalue";e={[math]::round(($_.lastvalue),2)}} | sort hostname | ft -a
+        Cassandra: Get-ZabbixItem @zabSessionParams -ItemName 'Compaction' -HostId (Get-ZabbixHost @zabSessionParams | ? name -match "cassandraNodes").hostid | ? name -Match "CurrentlyBlockedTasks|Pending|ActiveTasks" | select @{n="hostname";e={$_.hosts.name}},name,@{e={(convertfrom-epoch $_.lastclock).addhours(+1)};n="Time"},@{n="lastvalue";e={[math]::round(($_.lastvalue),2)}} | sort hostname,name | ft -a
+        Cassandra: Get-ZabbixItem @zabSessionParams -ItemName 'disk' -HostId (Get-ZabbixHost @zabSessionParams | ? name -match "cassandraNodes").hostid | ? key_ -match "cassandra,free" | select @{n="hostname";e={$_.hosts.name}},key_,@{e={(convertfrom-epoch $_.lastclock).addhours(+1)};n="Time"},@{n="prevvalue";e={[math]::round(($_.prevvalue/1gb),2)}},@{n="lastvalue";e={[math]::round(($_.lastvalue/1gb),2)}} | sort hostname | ft -a
+        Cassandra: Get-ZabbixItem @zabSessionParams -ItemName 'byte' -HostId (Get-ZabbixHost @zabSessionParams | ? name -match "cassandraNodes").hostid | select @{n="hostname";e={$_.hosts.name}},key_,@{e={(convertfrom-epoch $_.lastclock).addhours(+1)};n="Time"},@{n="prevvalue";e={[math]::round(($_.prevvalue/1gb),2)}},@{n="lastvalue";e={[math]::round(($_.lastvalue/1gb),2)}} | sort hostname | ft -a
 	#>
 	
 	[cmdletbinding()]
@@ -2514,7 +2714,10 @@ Function Get-ZabbixGraph {
 		Get graph
 	.Example
 		Get-ZabbixHost @zabSessionParams | ? name -eq "singleHost" | Get-ZabbixGraph @zabSessionParams | select name
-        Get graphs for single host
+		Get graphs for single host
+	.Example
+		Get-ZabbixHost @zabSessionParams | ? name -match hosName |  Get-ZabbixGraph @zabSessionParams | select name
+		Get graphs for multiple hosts	
 	.Example	
 		Get-ZabbixHost @zabSessionParams | ? name -eq "singleHost" | Get-ZabbixGraph @zabSessionParams -expandName | ? name -match 'RAM utilization' | select name
         Get graphs for single host     
@@ -2525,6 +2728,13 @@ Function Get-ZabbixGraph {
 		Get-ZabbixHost @zabSessionParams | ? name -eq "singleHost" | Get-ZabbixGraph @zabSessionParams -expandName | ? {!$_.graphDiscovery} | select name -ExpandProperty gitems | ft -a
         Get graphs for single host
     .Example
+		Get-ZabbixHost @zabSessionParams | ? name -match "hostName" | Get-ZabbixGraph @zabSessionParams -expandName | ? {!$_.graphDiscovery} | select name -ExpandProperty gitems | ft -a
+		Get graphs for multiple hosts
+    .Example
+		Get-ZabbixHost @zabSessionParams | ? name -match "hostName" | Get-ZabbixGraph @zabSessionParams -expandName | ? {!$_.graphDiscovery} | select name -ExpandProperty gitems -Unique | ft -a
+		Get-ZabbixHost @zabSessionParams | ? name -match "runtime" | Get-ZabbixGraph @zabSessionParams  -expandName | ? { !$_.graphDiscovery } | select name -Unique
+		Get graphs for multiple hosts, sort out duplicates
+	.Example
         Get-ZabbixGraph @zabSessionParams -HostID (Get-ZabbixHost @zabSessionParams | ? name -match "multipleHosts").hostid | select @{n="host";e={$_.hosts.name}},name | ? host -match "host0[5,6]"| ? name -notmatch Network | sort host
         Get graphs for multiple hosts
 	#>
@@ -2543,41 +2753,47 @@ Function Get-ZabbixGraph {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
-	$Body = @{
-	    method = "graph.get"
-	    params = @{
-			output = "extend"
-			selectTemplates = "extend"
-			selectHosts = @(
-                "hostid",
-                "name"
-            )
-			selectItems = "extend"
-			selectGraphItems = "extend"
-			selectGraphDiscovery = "extend"
-			expandName = $expandName
-			hostids = $HostID
-			graphids = $GraphID
-			templateids = $TemplateID
-			itemids = $ItemID
-			sortfield = "name"
-	    }
-
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
-
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
+	process {
 	
-    try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-        if ($a.result) {$a.result} else {$a.error}
-    } catch {
-        Write-Host "$_"
-        Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
-    }
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		$Body = @{
+			method = "graph.get"
+			params = @{
+				output = "extend"
+				selectTemplates = "extend"
+				selectHosts = @(
+					"hostid",
+					"name"
+				)
+				selectItems = "extend"
+				selectGraphItems = "extend"
+				selectGraphDiscovery = "extend"
+				expandName = $expandName
+				hostids = $HostID
+				graphids = $GraphID
+				templateids = $TemplateID
+				itemids = $ItemID
+				sortfield = "name"
+			}
+
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		try {
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+			if ($a.result) {$a.result} else {$a.error}
+		} catch {
+			Write-Host "$_"
+			Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
+		}
+	}
 }
 
 Function Save-ZabbixGraph {

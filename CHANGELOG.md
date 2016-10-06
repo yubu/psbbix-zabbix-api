@@ -1,7 +1,8 @@
 # Changelog
 #### [0.1.6-bf-beta] - 2016-10-05
 #### Added
-- Added Get-ZabbixHelp (gzh), for search/list useful examples within help. Pattern will be highlighted in yellow, thanks to David Mohundro's Find-String module.
+- Added Get-ZabbixHelp (gzh), for search/list useful examples within help. Pattern will be highlighted in yellow, thanks to David Mohundro's Find-String module
+
 #### Fixed 
 - Fixed duplicate function appearance
 - Fixed various functions behavior
@@ -20,4 +21,4 @@
 
 #### [0.1.2] - 2016-09-12
 #### Added
-- Added `psbbix.psd1` for support with the [PowerShellGallery](https://www.powershellgallery.com).
+- Added `psbbix.psd1` for support with the [PowerShellGallery](https://www.powershellgallery.com)

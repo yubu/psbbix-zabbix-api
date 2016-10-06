@@ -843,7 +843,7 @@ Function Get-ZabbixTemplate {
     
 	[CmdletBinding()]
 	Param (
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplaeName,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateName,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$HostID,
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,

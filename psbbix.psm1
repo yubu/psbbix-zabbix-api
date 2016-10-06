@@ -2602,6 +2602,9 @@ Function Get-ZabbixItem {
 		Get-ZabbixItem @zabSessionParams -ItemName 'RAM Utilization (%)' -HostId (Get-ZabbixHost @zabSessionParams | ? name -match "dc1").hostid | select @{n="hostname";e={$_.hosts.name}},name,key_,@{n="Time(UTC+1)";e={(convertfrom-epoch $_.lastclock).addhours(+1)}},status,prevvalue,@{n="lastvalue";e={[decimal][math]::Round($_.lastvalue,3)}} | sort lastvalue -desc | ft -a
 		Get Items  with name 'RAM Utilization (%)' for hosts by match
 	.Example
+		Get-ZabbixHost @zabSessionParams | ? name -match "Hosts" | Get-ZabbixItem @zabSessionParams -ItemName 'RAM Utilization (%)' | select @{n="hostname";e={$_.hosts.name}},name,key_,@{n="Time(UTC+1)";e={(convertfrom-epoch $_.lastclock).addhours(+1)}},status,prevvalue,@{n="lastvalue";e={[decimal][math]::Round($_.lastvalue,3)}} | sort lastvalue -desc | ft -a
+		Get Items  with name 'RAM Utilization (%)' for hosts by match, same as above
+	.Example
 		Get-ZabbixItem @zabSessionParams -ItemName 'Memory Total' -HostId (Get-ZabbixHost @zabSessionParams | ? name -match "").hostid | select @{n="hostname";e={$_.hosts.name}},name,key_,@{n="Time(UTC+1)";e={(convertfrom-epoch $_.lastclock).addhours(+1)}},prevvalue,@{n="lastvalue";e={[decimal][math]::round(($_.lastvalue/1gb),2)}} | sort lastvalue -desc | ft -a
 		Get Items  with name 'Memory Total' for hosts by match
 	.Example	
@@ -2610,6 +2613,9 @@ Function Get-ZabbixItem {
 	.Example	
 		Get-ZabbixItem @zabSessionParams -TemplateID (Get-ZabbixTemplate @zabSessionParams | ? name -match "myTemplates").templateid | ? history -ne 7 | select @{n="Template";e={$_.hosts.name}},history,name -Unique | sort Template
 		Get Items for templates, where history not 7 days
+	.Example
+		Get-ZabbixTemplate @zabSessionParams | ? name -match "myTemplates" | Get-ZabbixItem @zabSessionParams | select @{n="Template";e={$_.hosts.name}},key_ -Unique | sort Template
+		Get item keys for templates
 	.Example
 		Get-ZabbixItem @zabSessionParams -HostId (Get-ZabbixHost @zabSessionParams | ? name -match hostName).hostid | ? key_ -match "Version|ProductName" | ? key_ -notmatch "vmver" | select @{n="Time(UTC+1)";e={(convertfrom-epoch $_.lastclock).addhours(+1)}},@{n="host";e={$_.hosts.name}},lastvalue,name,key_ | sort host,key_ | ft -a
 		Get Items by host match, by key_ match/notmatch
@@ -2664,46 +2670,52 @@ Function Get-ZabbixItem {
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
-	$Body = @{
-	    method = "item.get"
-	    params = @{
-		    output = "extend"
-			webitems=$WebItems
-			triggerids = $TriggerID
-			templateids = $TemplateID
-			hostids = @($HostID)
-			groupids = $GroupID
-            
-			selectInterfaces = "extend"
-			selectTriggers = "extend"
-			selectApplications = "extend"
-            selectHosts = @(
-                "hostid",
-                "name"
-            )
-			sortfield = $sortby
-			
-			search = @{
-				key_ = $ItemKey
-				name = $ItemName
-			}
-	    }
-		
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
+	process {
 
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
-	
-    try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-        if ($a.result) {$a.result} else {$a.error}
-    } catch {
-        Write-Host "$_"
-        Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
-    }
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		$Body = @{
+			method = "item.get"
+			params = @{
+				output = "extend"
+				webitems=$WebItems
+				triggerids = $TriggerID
+				templateids = $TemplateID
+				hostids = @($HostID)
+				groupids = $GroupID
+				
+				selectInterfaces = "extend"
+				selectTriggers = "extend"
+				selectApplications = "extend"
+				selectHosts = @(
+					"hostid",
+					"name"
+				)
+				sortfield = $sortby
+				
+				search = @{
+					key_ = $ItemKey
+					name = $ItemName
+				}
+			}
+			
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		try {
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+			if ($a.result) {$a.result} else {$a.error}
+		} catch {
+			Write-Host "$_"
+			Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
+		}
+	}
 }
 
 Function Get-ZabbixGraph { 

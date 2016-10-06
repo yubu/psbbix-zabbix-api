@@ -1,26 +1,3 @@
-Function Remove-EmptyLines {
-	<#
-	.Synopsis
-		Remove emprty lines from file, string or variable
-	.Description
-		Remove emprty lines from file, string or variable
-	.Example
-		Remove-EmptyLines -in (gc c:\file.txt)
-	.Example
-		$var | Remove-EmptyLines
-	.Example
-		help -ex Remove-EmptyLines | out-string | Remove-EmptyLines 
-	#>
-	[cmdletbinding()]
-    [Alias("rmel")]
-    param ([parameter(mandatory=$false,position=0,ValueFromPipeline=$true)][array]$in)
-	if (!$psboundparameters.count) {
-		help -ex Remove-EmptyLines | Out-String | Remove-EmptyLines
-		return
-	}
-	$in.split("`r`n") | ? {$_.trim() -ne ""}
-}    
-
 Function convertFrom-epoch {
 	<#
 	.Synopsis

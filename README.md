@@ -13,7 +13,7 @@ Powershell Module for Zabbix API
 - [Zabbix API Libraries](<http://zabbix.org/wiki/Docs/api/libraries>)
 - [Zabbix 2.4 API documentation](<https://www.zabbix.com/documentation/2.4/manual/api>)
 
-### Warning: 
+### Warning: Black Friday Drafts: 
 Be careful. Especially with mass delete and mass update. 
 Bugs happen. Use on your own risk.
 
@@ -27,7 +27,7 @@ Bugs happen. Use on your own risk.
 import-module $env:userprofile\Documents\WindowsPowerShell\Modules\psbbix\psbbix.psm1
 ```
 ### Installation from Powershell Gallery
-1. Install-module psbbix
+1. Install-Module psbbix
 
 ### Getting Started
 ##### Use powershell help to get commands and examples
@@ -37,7 +37,12 @@ help get-zabbixhost -ex
 ## if you hate a lot of empty lines within powershell examples, you can compress the white space:
 help get-zabbixhost -ex | out-string | remove-emptyLines
 ```
-
+##### Use Get-ZabbixHelp (alias gzh) to find examples fast, in high density format. Search pattern will be highlighted by yellow color (Thanks to David Mohundro's Find-String module).
+```powershell
+Get-ZabbixHelp help
+gzh item -pattern "cassandra|entropy" 
+gzh alert -pattern "example 4"
+```
 ##### Connect
 ```powershell
 connect-Zabbix 10.10.10.10

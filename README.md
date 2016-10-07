@@ -40,6 +40,8 @@ help get-zabbixhost -ex | out-string | remove-emptyLines
 ##### Use Get-ZabbixHelp (alias gzh) to find examples fast, in high density format. Search pattern will be highlighted by yellow color (Thanks to David Mohundro's Find-String module).
 ```powershell
 Get-ZabbixHelp help
+gzh -list                                       # List module functions
+gzh -alias                                      # List module aliases
 gzh item -pattern "cassandra|entropy" 
 gzh alert -pattern "example 4"
 ```

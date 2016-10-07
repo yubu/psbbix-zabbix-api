@@ -639,6 +639,13 @@ Function Set-ZabbixHost {
 		Get-ZabbixHost @zabSessionParams -HostName HostName | Set-ZabbixHost @zabSessionParams -removeTemplates -TemplateID (Get-ZabbixHost @zabSessionParams -HostName "Host").parentTemplates.templateid
 		Unlink(remove) templates from host (case sensitive)
 	.Example
+		$templateID=(Get-ZabbixTemplate @zabSessionParams -HostID (Get-ZabbixHost @zabSessionParams | ? name -match hostname).hostid).templateid
+		Store existing templateIDs
+		$templateID+=(Get-ZabbixTemplate @zabSessionParams | ? name -match "newTemplate").templateid
+		Add new templateIDs
+		Get-ZabbixHost @zabSessionParams | ? name -match hosts | Set-ZabbixHost @zabSessionParams -TemplateID $templateID 
+		Link(add) additional template(s) to already existing, step by step
+	.Example
 		Get-ZabbixHost @zabSessionParams -HostName HostName | Set-ZabbixHost @zabSessionParams -TemplateID (Get-ZabbixHost @zabSessionParams -HostName SourceHost).parentTemplates.templateid
 		Link(add) templates to the host, according config of other host (case sensitive)
 	.Example
@@ -2452,7 +2459,6 @@ Function Set-ZabbixHostInterface {
 	}
 }
 
-
 Function New-ZabbixHostInterface { 
 	<#
 	.Synopsis
@@ -2465,6 +2471,10 @@ Function New-ZabbixHostInterface {
 	.Example	
 		Get-ZabbixHost @zabSessionParams | ? name -match "host01" | New-ZabbixHostInterface @zabSessionParams -Port 31721 -type 4 -main 1 -ip (Get-ZabbixHost @zabSessionParams | ? name -match "host01").interfaces.ip
 		Create new interface for host
+	.Example	
+		Get-ZabbixHost @zabSessionParams | ? name -match hosts | select hostid,name,@{n="ip";e={$_.interfaces.ip}} | New-ZabbixHostInterface @zabSessionParams -Port 31001 -type 4 -main 1 -verbose
+		Get-ZabbixHost @zabSessionParams | ? name -match hosts | select name,*error* | ft -a
+		Create new JMX (-type 4) interface to hosts and check if interface has no errors 
 	.Example	
 		(1..100) | %{Get-ZabbixHost @zabSessionParams | ? name -match "host0$_" | New-ZabbixHostInterface @zabSessionParams -Port 31721 -type 4 -main 0 -ip (Get-ZabbixHost @zabSessionParams | ? name -match "host0$_").interfaces.ip[0]}
 		Create new interface for multiple hosts 

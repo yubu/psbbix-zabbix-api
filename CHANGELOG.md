@@ -1,4 +1,9 @@
 # Changelog
+#### [0.1.7-bf-beta] - 2016-10-09
+#### Added
+- Validations
+- Usability improvemets 
+
 #### [0.1.6-bf-beta] - 2016-10-05
 #### Added
 - Added Get-ZabbixHelp (gzh), for search/list useful examples within help. Pattern will be highlighted in yellow, thanks to David Mohundro's Find-String module

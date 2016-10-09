@@ -3,7 +3,7 @@ Powershell Module for Zabbix API
 
 ##### Compatibility
 - Tested with Zabbix 2.4 
-- Tested with Powershell 5
+- Tested with Powershell 5+
 
 ##### Based on:
 - [Zabbix](<https://onedrive.live.com/?cid=3b909e9df5dc497a&id=3B909E9DF5DC497A%213668&ithint=folder,psm1&authkey=!AJrwHxfukZT-ueA>) by Benjamin RIOUAL
@@ -13,7 +13,7 @@ Powershell Module for Zabbix API
 - [Zabbix API Libraries](<http://zabbix.org/wiki/Docs/api/libraries>)
 - [Zabbix 2.4 API documentation](<https://www.zabbix.com/documentation/2.4/manual/api>)
 
-### Warning: Black Friday Drafts: 
+### Warning: Black Friday drafts: 
 Be careful. Especially with mass delete and mass update. 
 Bugs happen. Use on your own risk.
 

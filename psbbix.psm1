@@ -1,4 +1,5 @@
 
+
 # Load additional libraries
 Push-Location $psScriptRoot
 . .\epoch-time-convert.ps1
@@ -22,17 +23,19 @@ function Remove-EmptyLines {
 	[cmdletbinding()]
     [Alias("rmel")]
     param ([parameter(mandatory=$false,position=0,ValueFromPipeline=$true)][array]$in)
+	
 	if (!$psboundparameters.count) {
-		help -ex Remove-EmptyLines | out-string | Remove-EmptyLines
+		help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines
 		return
 	}
+	
 	$in.split("`r`n") | ? {$_.trim() -ne ""}
 }
 
 Function Get-ZabbixHelp {
 	<# 
 	.Synopsis
-		Get fast help for most useful examples for every function with no emty lines
+		Get fast help for most useful examples for every function with no empty lines
 	.Description
 		Get fast help for most useful examples for every function with no empty lines
 	.Example
@@ -70,7 +73,7 @@ Function Get-ZabbixHelp {
     Param ($znoun,$zverb,[switch]$list,$pattern,[switch]$short,[switch]$alias)
     
 	if (!(get-module "Find-String")) {Write-Host "`nInstall module Find-String from Powershell Gallery: install-module find-string -force. Unless this function won't work properly.`n" -f yellow; return }
-	if (!$psboundparameters.count) {Get-Help -ex Get-ZabbixHelp | out-string | Remove-EmptyLines; return}
+	if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 
     if ($list) {dir function:\*-zabbix* | select name | sort name}
 	elseif ($alias) {gcm -Module psbbix | %{gal -Definition $_.name -ea 0}}
@@ -119,6 +122,8 @@ Function New-ZabbixSession {
 		[switch]$noSSL
     )
     
+	# if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+
 	$Body = @{
 	    jsonrpc = "2.0"
 	    method = "user.login"
@@ -219,12 +224,15 @@ Function Remove-ZabbixSession {
 	[CmdletBinding()]
     [Alias("Disconnect-Zabbix")]
 	Param (
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
-	if (Get-ZabbixVersion @zabSessionParams) {
+
+	if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+
+	if (Get-ZabbixSession) {
 		$Body = @{
 			method = "user.logout"
 			jsonrpc = $jsonrpc
@@ -251,6 +259,9 @@ Function Get-ZabbixVersion {
 	.Synopsis
 		Get Zabbix server version
 	.Description
+		Get Zabbix server version
+	.Example
+		Get-ZabbixVersion
 		Get Zabbix server version
 	.Example
 		Get-ZabbixVersion @zabSessionParams
@@ -297,7 +308,7 @@ Function Get-ZabbixHost {
 		Get-ZabbixHost @zabSessionParams
 		Get all hosts
 	.Example  
-		Get-ZabbixHost -HostName HostName @zabSessionParams
+		Get-ZabbixHost @zabSessionParams -HostName SomeHost
 		Get host by name (case sensitive)
 	.Example
 		Get-ZabbixHost @zabSessionParams | ? name -match host | select hostid,host,status,available,httptests
@@ -366,13 +377,17 @@ Function Get-ZabbixHost {
 		[array]$HttpTestID,
 		[string]$SortBy="name",
 		[Parameter(ValueFromPipelineByPropertyName=$true)][string]$status,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
 	
 	process {
+
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
 
@@ -426,6 +441,144 @@ Function Get-ZabbixHost {
 			Write-Host "$_"
 			Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
 		}
+	}
+}
+
+Function Set-ZabbixHost {
+	<# 
+	.Synopsis
+		Set/update host settings
+	.Description
+		Set/update host settings
+	.Parameter HostID
+		HostID
+	.Example
+		Get-ZabbixHost @zabSessionParams | ? name -eq "host" | Set-ZabbixHost @zabSessionParams -status 0
+		Enable host (-status 0)
+	.Example
+		(1..9) | %{(Get-ZabbixHost @zabSessionParams | ? name -eq "host0$_") | Set-ZabbixHost @zabSessionParams -status 1}
+		Disable multiple hosts (-status 1)
+	.Example
+		Get-ZabbixHost @zabSessionParams | ? name -match "hostName" | %{Set-ZabbixHost @zabSessionParams -status 1 -HostID $_.hostid -parentTemplates $_.parenttemplates}
+		Disable multiple hosts
+	.Example
+		Get-ZabbixHost @zabSessionParams -HostName HostName | Set-ZabbixHost @zabSessionParams -removeTemplates -TemplateID (Get-ZabbixHost @zabSessionParams -HostName "Host").parentTemplates.templateid
+		Unlink(remove) templates from host (case sensitive)
+	.Example
+		$templateID=(Get-ZabbixTemplate @zabSessionParams -HostID (Get-ZabbixHost @zabSessionParams | ? name -match hostname).hostid).templateid
+		Store existing templateIDs
+		$templateID+=(Get-ZabbixTemplate @zabSessionParams | ? name -match "newTemplate").templateid
+		Add new templateIDs
+		Get-ZabbixHost @zabSessionParams | ? name -match hosts | Set-ZabbixHost @zabSessionParams -TemplateID $templateID 
+		Link(add) additional template(s) to already existing, step by step
+	.Example
+		Get-ZabbixHost @zabSessionParams -HostName HostName | Set-ZabbixHost @zabSessionParams -TemplateID (Get-ZabbixHost @zabSessionParams -HostName SourceHost).parentTemplates.templateid
+		Link(add) templates to the host, according config of other host (case sensitive)
+	.Example
+		(1..9) | %{Get-ZabbixHost @zabSessionParams -HostName "Host0$_" | Set-ZabbixHost @zabSessionParams -TemplateID ((Get-ZabbixHost @zabSessionParams | ? name -match "sourcehost").parenttemplates.templateid)}
+		Link(add) templates to multiple hosts, according config of other host
+	.Example
+		Get-ZabbixHost @zabSessionParams | ? name -match HostName | select host,hostid,status -ExpandProperty parenttemplates | Set-ZabbixHost @zabSessionParams -removeTemplates
+		Unlink(remove) all templates from host
+	.Example
+		Get-ZabbixHost @zabSessionParams | ? name -match HostName | select hostid,host,status -ExpandProperty parentTemplates | ? name -match TemplateName | Set-ZabbixHost @zabSessionParams -removeTemplates -Verbose
+		Unlink(remove) specific template(s) from the host.
+	#>	 
+    
+	[CmdletBinding()]
+	Param (
+        [Parameter(ValueFromPipelineByPropertyName=$true)]$HostName,
+        [Parameter(ValueFromPipelineByPropertyName=$true)]$HostID,
+		[array]$TemplateID,
+		[Parameter(ValueFromPipelineByPropertyName=$true)][array]$parentTemplates,
+		[array]$GroupID,
+		[array]$HttpTestID,
+		[switch]$removeTemplates,
+		[Parameter(ValueFromPipelineByPropertyName=$true)][string]$status,
+		[Parameter(ValueFromPipelineByPropertyName=$true)]$proxy_hostid,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
+    )
+    
+	process {
+		
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		if ($TemplateID.count -gt 9) {write-host "`nOnly up to 5 templates are allowed." -f red -b yellow; return}
+		
+		if ($removeTemplates) {
+			$Body = @{
+				method = "host.update"
+				params = @{
+					hostid = $HostID
+					status = $status
+					host = $HostName
+					templates_clear = @(
+						@{templateid = $TemplateID[0]}
+						@{templateid = $TemplateID[1]}
+						@{templateid = $TemplateID[2]}
+						@{templateid = $TemplateID[3]}
+						@{templateid = $TemplateID[4]}
+						@{templateid = $TemplateID[5]}
+						@{templateid = $TemplateID[6]}
+						@{templateid = $TemplateID[7]}
+						@{templateid = $TemplateID[8]}
+					)
+				}
+
+				jsonrpc = $jsonrpc
+				id = $id
+				auth = $session
+			}
+		}
+		elseif ($TemplateID) { 
+			$Body = @{
+				method = "host.update"
+				params = @{
+					hostid = $HostID
+					status = $status
+					templates = @(
+						@{templateid = $TemplateID[0]}
+						@{templateid = $TemplateID[1]}
+						@{templateid = $TemplateID[2]}
+						@{templateid = $TemplateID[3]}
+						@{templateid = $TemplateID[4]}
+					)
+				}
+				
+				jsonrpc = $jsonrpc
+				id = $id
+				auth = $session
+			}
+		}
+		else {
+			$Body = @{
+				method = "host.update"
+				params = @{
+					hostid = $HostID
+					status = $status
+					parenttemplates = $parenttemplates
+					proxy_hostid = $proxy_hostid
+				}
+				
+				jsonrpc = $jsonrpc
+				id = $id
+				auth = $session
+			}
+		
+		}
+		
+		$BodyJSON = ConvertTo-Json $Body -Depth 3
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
 	}
 }
 
@@ -509,14 +662,17 @@ Function New-ZabbixHost {
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$Templates,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$Interfaces,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL,
         [Switch]$MonitorByDNSName
     )
 
     process {
+
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -618,141 +774,6 @@ Function New-ZabbixHost {
 	}
 }
 
-Function Set-ZabbixHost {
-	<# 
-	.Synopsis
-		Set/update host settings
-	.Description
-		Set/update host settings
-	.Parameter HostID
-		HostID
-	.Example
-		Get-ZabbixHost @zabSessionParams | ? name -eq "host" | Set-ZabbixHost @zabSessionParams -status 0
-		Enable host (-status 0)
-	.Example
-		(1..9) | %{(Get-ZabbixHost @zabSessionParams | ? name -eq "host0$_") | Set-ZabbixHost @zabSessionParams -status 1}
-		Disable multiple hosts (-status 1)
-	.Example
-		Get-ZabbixHost @zabSessionParams | ? name -match "hostName" | %{Set-ZabbixHost @zabSessionParams -status 1 -HostID $_.hostid -parentTemplates $_.parenttemplates}
-		Disable multiple hosts
-	.Example
-		Get-ZabbixHost @zabSessionParams -HostName HostName | Set-ZabbixHost @zabSessionParams -removeTemplates -TemplateID (Get-ZabbixHost @zabSessionParams -HostName "Host").parentTemplates.templateid
-		Unlink(remove) templates from host (case sensitive)
-	.Example
-		$templateID=(Get-ZabbixTemplate @zabSessionParams -HostID (Get-ZabbixHost @zabSessionParams | ? name -match hostname).hostid).templateid
-		Store existing templateIDs
-		$templateID+=(Get-ZabbixTemplate @zabSessionParams | ? name -match "newTemplate").templateid
-		Add new templateIDs
-		Get-ZabbixHost @zabSessionParams | ? name -match hosts | Set-ZabbixHost @zabSessionParams -TemplateID $templateID 
-		Link(add) additional template(s) to already existing, step by step
-	.Example
-		Get-ZabbixHost @zabSessionParams -HostName HostName | Set-ZabbixHost @zabSessionParams -TemplateID (Get-ZabbixHost @zabSessionParams -HostName SourceHost).parentTemplates.templateid
-		Link(add) templates to the host, according config of other host (case sensitive)
-	.Example
-		(1..9) | %{Get-ZabbixHost @zabSessionParams -HostName "Host0$_" | Set-ZabbixHost @zabSessionParams -TemplateID ((Get-ZabbixHost @zabSessionParams | ? name -match "sourcehost").parenttemplates.templateid)}
-		Link(add) templates to multiple hosts, according config of other host
-	.Example
-		Get-ZabbixHost @zabSessionParams | ? name -match HostName | select host,hostid,status -ExpandProperty parenttemplates | Set-ZabbixHost @zabSessionParams -removeTemplates
-		Unlink(remove) all templates from host
-	.Example
-		Get-ZabbixHost @zabSessionParams | ? name -match HostName | select hostid,host,status -ExpandProperty parentTemplates | ? name -match TemplateName | Set-ZabbixHost @zabSessionParams -removeTemplates -Verbose
-		Unlink(remove) specific template(s) from the host.
-	#>	 
-    
-	[CmdletBinding()]
-	Param (
-        [Parameter(ValueFromPipelineByPropertyName=$true)]$HostName,
-        [Parameter(ValueFromPipelineByPropertyName=$true)]$HostID,
-		[array]$TemplateID,
-		[Parameter(ValueFromPipelineByPropertyName=$true)][array]$parentTemplates,
-		[array]$GroupID,
-		[array]$HttpTestID,
-		[switch]$removeTemplates,
-		[Parameter(ValueFromPipelineByPropertyName=$true)][string]$status,
-		[Parameter(ValueFromPipelineByPropertyName=$true)]$proxy_hostid,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
-    )
-    
-	process {
-	
-		$boundparams=$PSBoundParameters | out-string
-		write-verbose "($boundparams)"
-
-		if ($TemplateID.count -gt 9) {write-host "`nOnly up to 5 templates are allowed." -f red -b yellow; return}
-		
-		if ($removeTemplates) {
-			$Body = @{
-				method = "host.update"
-				params = @{
-					hostid = $HostID
-					status = $status
-					host = $HostName
-					templates_clear = @(
-						@{templateid = $TemplateID[0]}
-						@{templateid = $TemplateID[1]}
-						@{templateid = $TemplateID[2]}
-						@{templateid = $TemplateID[3]}
-						@{templateid = $TemplateID[4]}
-						@{templateid = $TemplateID[5]}
-						@{templateid = $TemplateID[6]}
-						@{templateid = $TemplateID[7]}
-						@{templateid = $TemplateID[8]}
-					)
-				}
-
-				jsonrpc = $jsonrpc
-				id = $id
-				auth = $session
-			}
-		}
-		elseif ($TemplateID) { 
-			$Body = @{
-				method = "host.update"
-				params = @{
-					hostid = $HostID
-					status = $status
-					templates = @(
-						@{templateid = $TemplateID[0]}
-						@{templateid = $TemplateID[1]}
-						@{templateid = $TemplateID[2]}
-						@{templateid = $TemplateID[3]}
-						@{templateid = $TemplateID[4]}
-					)
-				}
-				
-				jsonrpc = $jsonrpc
-				id = $id
-				auth = $session
-			}
-		}
-		else {
-			$Body = @{
-				method = "host.update"
-				params = @{
-					hostid = $HostID
-					status = $status
-					parenttemplates = $parenttemplates
-					proxy_hostid = $proxy_hostid
-				}
-				
-				jsonrpc = $jsonrpc
-				id = $id
-				auth = $session
-			}
-		
-		}
-		
-		$BodyJSON = ConvertTo-Json $Body -Depth 3
-		write-verbose $BodyJSON
-		
-		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-		if ($a.result) {$a.result} else {$a.error}
-	}
-}
-
 Function Remove-ZabbixHost {
 	<# 
 	.Synopsis
@@ -789,14 +810,18 @@ Function Remove-ZabbixHost {
 	
     [CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
 	Param (
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][array]$HostID,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+        [Parameter(Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$true)][array]$HostID,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
 	
     process {
+
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
 
@@ -853,13 +878,16 @@ Function Get-ZabbixTemplate {
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateName,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$HostID,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
    
 	process {
+
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -944,13 +972,16 @@ Function Get-ZabbixMaintenance {
 	Param (
         $MaintenanceName,
         $MaintenanceID,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
     
 	process {
+
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -1044,13 +1075,16 @@ Function New-ZabbixMaintenance {
 		$TimeperiodStartDate,
 		#epoch time
 		[Parameter(Mandatory=$True)]$TimeperiodPeriod,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
     
 	process {
+
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -1141,13 +1175,16 @@ Function Remove-ZabbixMaintenance {
 	[CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
 	Param (
         [Parameter(ValueFromPipelineByPropertyName=$true)][array]$MaintenanceID,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
      
 	process {
+
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -1207,13 +1244,17 @@ Function Export-ZabbixConfig {
 		[array]$GroupID,
 		[array]$TemplateID,
 		[string]$Format="xml",
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
 	
 	process {
+
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"	
 		
@@ -1289,43 +1330,52 @@ Function Get-ZabbixAlert {
 		#"Time until to display alerts. Default: till now. Time is in UTC/GMT"
 		$TimeTill=(convertTo-epoch ((get-date).addhours(0)).ToUniversalTime()),
 		[array] $SortBy="clock",
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
-	
-	$Body = @{
-	    method = "alert.get"
-	    params = @{
-		    output = "extend"
-			time_from = $timeFrom
-			time_till = $timeTill
-            selectMediatypes = "extend"
-			selectUsers = "extend"
-			selectHosts = @(
-                "hostid",
-                "name"
-            )
-			hostids = $HostID
-			sortfield = @($sortby)
-	    }
 
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
+	process {
 
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
-	
-    try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-        if ($a.result) {$a.result} else {$a.error}
-    } catch {
-        Write-Host "$_"
-        Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
-    }
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		$Body = @{
+			method = "alert.get"
+			params = @{
+				output = "extend"
+				time_from = $timeFrom
+				time_till = $timeTill
+				selectMediatypes = "extend"
+				selectUsers = "extend"
+				selectHosts = @(
+					"hostid",
+					"name"
+				)
+				hostids = $HostID
+				sortfield = @($sortby)
+			}
+
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		try {
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+			if ($a.result) {$a.result} else {$a.error}
+		} catch {
+			Write-Host "$_"
+			Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
+		}
+	}
 }
 
 Function Get-ZabbixUser { 
@@ -1351,41 +1401,47 @@ Function Get-ZabbixUser {
 	Param (
 		[array]$SortBy="alias",
 		[switch]$getAccess=$true,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
-	$boundparams=$PSBoundParameters | out-string
-	write-verbose "($boundparams)"
-
-	$Body = @{
-	    method = "user.get"
-	    params = @{
-		    output = "extend"
-			selectMedias = "extend"
-			selectMediatypes = "extend"
-			selectUsrgrps = "extend"
-			sortfield = @($sortby)
-			getAccess = $getAccess
-	    }
-
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
-
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
+	process {
 	
-    try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-        if ($a.result) {$a.result} else {$a.error}
-    } catch {
-        Write-Host "$_"
-        Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
-    }
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+		
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		$Body = @{
+			method = "user.get"
+			params = @{
+				output = "extend"
+				selectMedias = "extend"
+				selectMediatypes = "extend"
+				selectUsrgrps = "extend"
+				sortfield = @($sortby)
+				getAccess = $getAccess
+			}
+
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		try {
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+			if ($a.result) {$a.result} else {$a.error}
+		} catch {
+			Write-Host "$_"
+			Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
+		}
+	}
 }
 
 Function Remove-ZabbixUser { 
@@ -1408,13 +1464,17 @@ Function Remove-ZabbixUser {
 	[cmdletbinding(SupportsShouldProcess,ConfirmImpact='High')]
 	Param (
 		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][array]$UserID,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
 	process {
+
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
 
@@ -1472,14 +1532,17 @@ Function Set-ZabbixUser {
 		#[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$medias,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Name,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Surname,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
 	process {
-	
+		
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
 
@@ -1549,13 +1612,17 @@ Function New-ZabbixUser {
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Refresh,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Name,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Surname,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
-	process {
 	
+	process {
+		
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
 
@@ -1641,39 +1708,45 @@ Function Get-ZabbixUserGroup {
 		[array]$SortBy="name",
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)]$status,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$userids,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
-	$boundparams=$PSBoundParameters | out-string
-	write-verbose "($boundparams)"
+	process {
+		
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
 
-	$Body = @{
-	    method = "usergroup.get"
-	    params = @{
-		    output = "extend"
-			selectUsers = "extend"
-			userids = $userids
-			status = $status
-			sortfield = @($sortby)
-	    }
-	    jsonrpc = $jsonrpc
-	    id = $id
-	    auth = $session
-    }
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
 
-    $BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
-	
-    try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-        if ($a.result) {$a.result} else {$a.error}
-    } catch {
-        Write-Host "$_"
-        Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
-    }
+		$Body = @{
+			method = "usergroup.get"
+			params = @{
+				output = "extend"
+				selectUsers = "extend"
+				userids = $userids
+				status = $status
+				sortfield = @($sortby)
+			}
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		try {
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+			if ($a.result) {$a.result} else {$a.error}
+		} catch {
+			Write-Host "$_"
+			Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
+		}
+	}
 }
 
 Function Get-ZabbixTrigger {
@@ -1711,42 +1784,51 @@ Function Get-ZabbixTrigger {
         [array]$TriggerID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$HostID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
 	
-	$Body = @{
-		method = "trigger.get"
-		params = @{
-			output = "extend"
-			selectFunctions = "extend"
-			selectLastEvent = "extend"
-			selectGroups = "extend"
-			selectHosts = "extend"
-			expandDescription = $ExpandDescription
-			expandExpression = $ExpandExpression
-			triggerids = $TriggerID
-			templateids = $TemplateID
-			hostids = $HostID
-		}
-		
-		jsonrpc = $jsonrpc
-		id = $id
-		auth = $session
-	}
+	process {
 
-    $BodyJSON = ConvertTo-Json $Body
-    write-verbose $BodyJSON
-	
-	try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-        if ($a.result) {$a.result} else {$a.error}
-    } catch {
-        Write-Host "$_"
-        Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
-    }
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		$Body = @{
+			method = "trigger.get"
+			params = @{
+				output = "extend"
+				selectFunctions = "extend"
+				selectLastEvent = "extend"
+				selectGroups = "extend"
+				selectHosts = "extend"
+				expandDescription = $ExpandDescription
+				expandExpression = $ExpandExpression
+				triggerids = $TriggerID
+				templateids = $TemplateID
+				hostids = $HostID
+			}
+			
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		try {
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+			if ($a.result) {$a.result} else {$a.error}
+		} catch {
+			Write-Host "$_"
+			Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
+		}
+	}
 }
 
 Function Set-ZabbixTrigger {
@@ -1775,14 +1857,17 @@ Function Set-ZabbixTrigger {
 		[switch]$ExpandDescription,
 		[switch]$ExpandExpression,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
 	
 	process {
-	
+		
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
 
@@ -1826,13 +1911,16 @@ Function Get-ZabbixAction {
 	[cmdletbinding()]
 	Param (
 		[array] $SortBy="name",
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
 	process {
+
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -1880,13 +1968,17 @@ Function Set-ZabbixAction {
 		[array] $SortBy="name",
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)]$status,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)]$ActionID,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
 	process {
+
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
 
@@ -1946,12 +2038,16 @@ Function Get-ZabbixApplication {
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$GroupID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
     
 	process {
+
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
 		
@@ -2051,70 +2147,80 @@ Function Get-ZabbixHttpTest {
 		$HttpTestName,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$HostID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
-    if (!$hostid) {
-		$Body = @{
-			method = "httptest.get"
-			params = @{
-				output = "extend"
-				selectHosts = "extend"
-				selectSteps = "extend"
-				httptestids = $HttpTestID
-				templateids = $TemplateID
-				filter = @{
-					name = $HttpTestName
+
+	process {
+
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		if (!$hostid) {
+			$Body = @{
+				method = "httptest.get"
+				params = @{
+					output = "extend"
+					selectHosts = "extend"
+					selectSteps = "extend"
+					httptestids = $HttpTestID
+					templateids = $TemplateID
+					filter = @{
+						name = $HttpTestName
+					}
 				}
+				
+				selectHosts = @(
+					"hostid",
+					"name"
+				)
+				
+				jsonrpc = $jsonrpc
+				id = $id
+				auth = $session
 			}
-			
-			selectHosts = @(
-				"hostid",
-				"name"
-			)
-			
-			jsonrpc = $jsonrpc
-			id = $id
-			auth = $session
+		}
+		if ($HostID) {
+			$Body = @{
+				method = "httptest.get"
+				params = @{
+					output = "extend"
+					selectHosts = "extend"
+					selectSteps = "extend"
+					httptestids = $HttpTestID
+					hostids = @($hostid)
+					filter = @{
+						name = $HttpTestName
+					}
+				}
+				
+				selectHosts = @(
+					"hostid",
+					"name"
+				)
+				
+				jsonrpc = $jsonrpc
+				id = $id
+				auth = $session
+			}
+		}
+		
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		try {
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+			if ($a.result) {$a.result} else {$a.error}
+		} catch {
+			Write-Host "$_"
+			Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
 		}
 	}
-    if ($HostID) {
-		$Body = @{
-			method = "httptest.get"
-			params = @{
-				output = "extend"
-				selectHosts = "extend"
-				selectSteps = "extend"
-				httptestids = $HttpTestID
-				hostids = @($hostid)
-				filter = @{
-					name = $HttpTestName
-				}
-			}
-			
-			selectHosts = @(
-				"hostid",
-				"name"
-			)
-			
-			jsonrpc = $jsonrpc
-			id = $id
-			auth = $session
-		}
-	}
-	
-	$BodyJSON = ConvertTo-Json $Body
-	write-verbose $BodyJSON
-	
-    try {
-        $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-        if ($a.result) {$a.result} else {$a.error}
-    } catch {
-        Write-Host "$_"
-        Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
-    }
 }
 
 Function New-ZabbixHttpTest {
@@ -2148,59 +2254,69 @@ Function New-ZabbixHttpTest {
 		[Parameter(Mandatory=$True)]$HttpTestName,
 		#[Parameter(Mandatory=$True)]$HttpTestStepURL,
 		[Parameter(Mandatory=$false)]$HttpTestStepURL,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
-    if ($steps) {
-		$Body = @{
-			method = "httptest.create"
-			params = @{
-				name = $HttpTestName
-				hostid = $HostID
-				templateid = $TemplateID
-				applicationid = $applicationid
-				status = $status
-				steps = $steps
-			}
-			
-			jsonrpc = $jsonrpc
-			id = $id
-			auth = $session
-		}
-	}
-	else {
-		$Body = @{
-			method = "httptest.create"
-			params = @{
-				name = $HttpTestName
-				hostid = $HostID
-				templateid = $TemplateID
-				applicationid = $applicationid
-				status = $status
-				steps = @(
-					@{
-						name = $HttpTestStepName
-						url = $HttpTestStepURL
-						status_codes = $StatusCodes
-						required = $HttpTestStepRequired
-						follow_redirects = 1
-						timeout = $Timeout
-					}
-				) 
-			}
-			
-			jsonrpc = $jsonrpc
-			id = $id
-			auth = $session
-		}
-	}
-    $BodyJSON = ConvertTo-Json $Body -Depth 3
-	write-verbose $BodyJSON
+
+	process {
 	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-    if ($a.result) {$a.result} else {$a.error}
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		if ($steps) {
+			$Body = @{
+				method = "httptest.create"
+				params = @{
+					name = $HttpTestName
+					hostid = $HostID
+					templateid = $TemplateID
+					applicationid = $applicationid
+					status = $status
+					steps = $steps
+				}
+				
+				jsonrpc = $jsonrpc
+				id = $id
+				auth = $session
+			}
+		}
+		else {
+			$Body = @{
+				method = "httptest.create"
+				params = @{
+					name = $HttpTestName
+					hostid = $HostID
+					templateid = $TemplateID
+					applicationid = $applicationid
+					status = $status
+					steps = @(
+						@{
+							name = $HttpTestStepName
+							url = $HttpTestStepURL
+							status_codes = $StatusCodes
+							required = $HttpTestStepRequired
+							follow_redirects = 1
+							timeout = $Timeout
+						}
+					) 
+				}
+				
+				jsonrpc = $jsonrpc
+				id = $id
+				auth = $session
+			}
+		}
+		$BodyJSON = ConvertTo-Json $Body -Depth 3
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
+	}
 }
 
 Function Set-ZabbixHttpTest {
@@ -2235,58 +2351,67 @@ Function Set-ZabbixHttpTest {
         $HttpTestStepRequired,
 		$status,
 		[switch]$UpdateSteps,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False ,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False ,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False ,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False ,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
 	
-	if ($UpdateSteps) 
-	{
-		$Body = @{
+	process {
+
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		if ($UpdateSteps) 
+		{
+			$Body = @{
+				method = "httptest.update"
+				params = @{
+					httptestid = $HttpTestID
+					status = $status
+					name = $HttpTestName
+					steps = @(
+						@{
+							name = $HttpTestStepName
+							url = $HttpTestStepURL
+							status_codes = 200
+							required = $HttpTestStepRequired
+							follow_redirects = 1
+							timeout = 15
+						}
+					) 
+				}
+				
+				jsonrpc = $jsonrpc
+				id = $id
+				auth = $session
+			}
+		}
+		else 
+		{
+			$Body = @{
 			method = "httptest.update"
 			params = @{
 				httptestid = $HttpTestID
 				status = $status
 				name = $HttpTestName
-				steps = @(
-					@{
-						name = $HttpTestStepName
-						url = $HttpTestStepURL
-						status_codes = 200
-						required = $HttpTestStepRequired
-						follow_redirects = 1
-						timeout = 15
-					}
-				) 
 			}
 			
 			jsonrpc = $jsonrpc
 			id = $id
 			auth = $session
+			}
 		}
-	}
-	else 
-	{
-		$Body = @{
-	    method = "httptest.update"
-	    params = @{
-			httptestid = $HttpTestID
-			status = $status
-			name = $HttpTestName
-	    }
-		
-	    jsonrpc = $jsonrpc
-		id = $id
-	    auth = $session
-		}
-	}
 
-    $BodyJSON = ConvertTo-Json $Body -Depth 3
-	write-verbose $BodyJSON
-	
-    $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-    if ($a.result) {$a.result} else {$a.error}
+		$BodyJSON = ConvertTo-Json $Body -Depth 3
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
+	}
 }
 
 Function Remove-ZabbixHttpTest {
@@ -2308,31 +2433,40 @@ Function Remove-ZabbixHttpTest {
 	[CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
     Param (
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][array]$HttpTestID,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
     )
 	
-	$Body = @{
-		method = "httptest.delete"
-		params = @($HttpTestID)
-		jsonrpc = $jsonrpc
-		id = $id
-		auth = $session
-	}
+	process {
 
-    $BodyJSON = ConvertTo-Json $Body -Depth 3
-	write-verbose $BodyJSON
-	
-    if ([bool]$WhatIfPreference.IsPresent) {
-		##
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		$Body = @{
+			method = "httptest.delete"
+			params = @($HttpTestID)
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body -Depth 3
+		write-verbose $BodyJSON
+		
+		if ([bool]$WhatIfPreference.IsPresent) {
+			##
+		}
+		if ($PSCmdlet.ShouldProcess($HostID,"Delete")){  
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		}
+		
+		if ($a.result) {$a.result} else {$a.error}
 	}
-	if ($PSCmdlet.ShouldProcess($HostID,"Delete")){  
-		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-	}
-	
-	if ($a.result) {$a.result} else {$a.error}
 }
 
 Function Get-ZabbixHostInterface { 
@@ -2366,14 +2500,17 @@ Function Get-ZabbixHostInterface {
 	[cmdletbinding()]
 	Param (
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$HostID,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
 	process {
-	
+		
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
 
@@ -2426,14 +2563,17 @@ Function Set-ZabbixHostInterface {
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Port,
 		#Main: Possible values are:  0 - not default;  1 - default. 
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$main,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
 	process {
 
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+		
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
 
@@ -2512,13 +2652,17 @@ Function New-ZabbixHostInterface {
 		#UseIP: Possible values are:  0 - connect using host DNS name;  1 - connect using host IP address for this host interface. 
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$useIP="1",
 		#[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$InterfaceID,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
 	process {
+
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
 
@@ -2567,13 +2711,16 @@ Function Remove-ZabbixHostInterface {
 	Param (
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$HostID,
 		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][array]$InterfaceId,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
 	process {
+
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -2674,13 +2821,16 @@ Function Get-ZabbixItem {
 		[Parameter(ParameterSetName="hostid",Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
 		[Parameter(ParameterSetName="hostid",Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TriggerID,
 		[switch]$WebItems,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
 	process {
+
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -2769,14 +2919,17 @@ Function Get-ZabbixGraph {
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$ItemID,
 		[switch]$expandName=$true,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$session,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$id,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$URL
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
 	)
 	
 	process {
-	
+		
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
 

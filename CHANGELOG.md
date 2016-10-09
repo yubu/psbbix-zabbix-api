@@ -1,5 +1,5 @@
 # Changelog
-#### [0.1.7-bf-beta] - 2016-10-09
+#### [0.1.6-bf-beta.1] - 2016-10-09
 #### Added
 - Validations
 - Usability improvemets 

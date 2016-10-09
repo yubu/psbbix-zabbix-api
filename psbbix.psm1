@@ -326,7 +326,13 @@ Function Get-ZabbixHost {
 		Get-ZabbixHost @zabSessionParams -sortby name | ? name -match host | select hostid,host,status -ExpandProperty httptests
 		Get host(s) by name match (case insensitive), sort by name. Possible values are: hostid, host, name (default), status
 	.Example
-		Get-ZabbixHost @zabSessionParams | ? name -match "" | ? jmx_available -match 1 | select hostid,name
+		Get-ZabbixHost @zabSessionParams | ? name -match HostName | select name,*error* | ft -a
+		Get all errors for hosts
+	.Example
+		Get-ZabbixHost @zabSessionParams | ? name -match HostName | select name,*jmx* | ft -a
+		Get info regarding JMX connections for hosts
+	.Example
+		Get-ZabbixHost @zabSessionParams | ? name -match "" | ? jmx_available -match 1 | select hostid,name,jmx_available
 		Get host(s) with JMX interface(s) active
 	.Example
 		Get-ZabbixHost @zabSessionParams | ? parentTemplates -match "jmx" | select hostid,name,available,jmx_available
@@ -335,11 +341,11 @@ Function Get-ZabbixHost {
 		Get-ZabbixHost @zabSessionParams | ? status -eq 0 | ? available -eq 0 | select hostid,name,status,available,jmx_available | ft -a
 		Get hosts, which are enabled, but unreachable
 	.Example
-		Get-ZabbixHost @zabSessionParams -GroupID (Get-ZabbixGroup @zabSessionParams -GroupName "GroupName").groupid | select hostid,host,status,available,httptests
+		Get-ZabbixHost @zabSessionParams -GroupID (Get-ZabbixGroup @zabSessionParams -GroupName "DP").groupid | ? httpTests | select hostid,host,status,available,httptests | sort host | ft -a
 		Get host(s) by host group, match name "GroupName" (case sensitive)
 	.Example
 		Get-ZabbixHost @zabSessionParams -hostname HostName | Get-ZabbixItem @zabSessionParams -WebItems -ItemKey web.test.error -ea silent | select name,key_,lastclock
-		Get Items for the host (HostName is case sensitive)
+		Get web tests items for the host (HostName is case sensitive)
 	.Example
 		(Get-ZabbixHost @zabSessionParams | ? name -match host).parentTemplates.name
 		Get templates, linked to the host by hostname match (case insensitive) 
@@ -910,6 +916,83 @@ Function Get-ZabbixTemplate {
 
 		$BodyJSON = ConvertTo-Json $Body
 		write-verbose $BodyJSON
+		try {
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+			if ($a.result) {$a.result} else {$a.error}
+		} catch {
+			Write-Host "$_"
+			Write-Host "Too many entries to return from Zabbix server. Check/reduce filters." -f cyan
+		}
+	}
+}
+
+Function Get-ZabbixGroup {
+	<#
+	.Synopsis
+		Get all server groups
+	.Description
+		Get all server groups
+	.Parameter GroupName
+		Filter by name of the group
+	.Parameter GroupID
+		Filter by id of the group
+	.Example
+		Get-ZabbixGroup @zabSessionParams
+		Get server groups
+	.Example
+		(Get-ZabbixGroup @zabSessionParams -GroupName somegroup).hosts
+		Get hosts from group (case sensitive)
+	.Example
+		(Get-ZabbixGroup @zabSessionParams | ? name -match somegroup).hosts
+		Get group and hosts (cas insensitive)
+	.Example
+		Get-ZabbixGroup @zabSessionParams | ? name -match somegroup | select name -ExpandProperty hosts | ft -a
+		Get group and the hosts
+	.Example
+		Get-ZabbixGroup @zabSessionParams -GroupID 10001
+		Get group by ID
+	#>
+
+	[CmdletBinding()]
+	Param (
+        $GroupName,
+        $GroupID,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL
+    )
+
+	process {
+
+		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(get-zabbixsession)) {return}
+
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		$Body = @{
+			method = "hostgroup.get"
+			params = @{
+				output = "extend"
+				selectHosts = @(
+					"hostid",
+					"host"
+				)
+				filter = @{
+					name = $GroupName
+				}
+				groupids = $GroupID
+			}
+
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+
 		try {
 			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
 			if ($a.result) {$a.result} else {$a.error}

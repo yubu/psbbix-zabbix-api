@@ -1,4 +1,6 @@
 # Changelog
+#### [0.1.6-bf] - 2016-10-10
+
 #### [0.1.6-bf-beta.1] - 2016-10-09
 #### Added
 - Validations

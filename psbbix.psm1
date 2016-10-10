@@ -618,11 +618,20 @@ Function New-ZabbixHost {
 		New-ZabbixHost @zabSessionParams -HostName NewHost -IP 10.20.10.10 -GroupID 8 -TemplateID (Get-ZabbixHost @zabSessionParams | ? name -match "host").parentTemplates.templateid -status 1
 		Create new host (case sensitive), with multiple attached Templates and leave it disabled (-status 1)
 	.Example
+		Import-Csv c:\new-servers.csv | %{New-ZabbixHost -HostName $_.$Hostname -IP $_.IP -TemplateID "10081","10166" -GroupID 8}
+		Mass create new hosts
+	.Example
+		Import-Csv c:\new-servers.csv | %{New-ZabbixHost @zabSessionParams -HostName $_.Hostname -IP $_.IP -GroupID $_.GroupID -TemplateID $_.TemplateID -status $_.status}
+		Mass create new hosts
+	.Example
 		Get-ZabbixHost @zabSessionParams | ? name -match SourceHost | New-ZabbixHost @zabSessionParams -HostName NewHost -IP 10.20.10.10
 		Clone host with single interface
+	.Example
+		(1..9) | %{Get-ZabbixHost @zabSessionParams | ? name -match sourcehost | New-ZabbixHost @zabSessionParams -HostName NewHost0$_ -IP 10.20.10.1$_ -GroupID 8 -TemplateID "10081","10166" -status 1 -verbose}
+		Clone 1 host to multiple new with single interface
 	.Example 
 		Get-ZabbixHost @zabSessionParams | ? name -match SourceHost | New-ZabbixHost @zabSessionParams -HostName NewHost -IP 10.20.10.10 -TemplateID (Get-ZabbixHost @zabSessionParams | ? name -match "SourceHost").parentTemplates.templateid -status 1
-		Clone host, while new host will be disabled
+		Clone host with linked templates, while new host will be disabled
 	.Example
 		Get-ZabbixHost @zabSessionParams | ? name -match SourceHost | New-ZabbixHost @zabSessionParams -HostName NewHostName -IP 10.20.10.10 -TemplateID (Get-ZabbixHost @zabSessionParams | ? name -match "SourceHost").parentTemplates.templateid -Interfaces (Get-ZabbixHostInterface @zabSessionParams -HostID (Get-ZabbixHost @zabSessionParams -HostName SourceHost).hostid) -status 1
 		Get-ZabbixHost @zabSessionParams | ? name -match NewHost | Get-ZabbixHostInterface @zabSessionParams | %{Set-ZabbixHostInterface @zabSessionParams -IP 10.20.10.10 -InterfaceID $_.interfaceid -Port $_.port -HostID $_.hostid}
@@ -651,7 +660,7 @@ Function New-ZabbixHost {
 		Check whether template works:
 		Get-ZabbixItem @zabSessionParams -HostId (Get-ZabbixHost @zabSessionParams | ? name -match NewHostName).hostid | ? key_ -match "Version|ProductName|HeapMemoryUsage.used" | ? key_ -notmatch "vmver" | select @{n="lastclock";e={(convertfrom-epoch $_.lastclock).addhours(+1)}},@{n="host";e={$_.hosts.name}},@{n="Application";e={$_.applications.name}},lastvalue,key_ | sort host,application,key_ | ft -a
 
-		Clone host with multiple JMX interfaces, step by step. May not be comatible wit your environment.
+		Clone host with multiple JMX interfaces, step by step. May not be comatible with your environment.
 		In this scenario we clone host with multiple JMX interfaces. To each JMX interface will be linked specific to this interface JMX template.
 		It can be done only if we will link JMX template to the interface, marked default (-main 1)   
 	#>
@@ -659,15 +668,17 @@ Function New-ZabbixHost {
     [CmdletBinding()]
 	Param (
         [Parameter(Mandatory=$True)][string]$HostName,
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$false)][string]$IP,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][string]$IP,
         [string]$DNSName,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Port = 10050,
 		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$status,
         [Parameter(Mandatory=$False)][string]$GroupID,
+		# [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$GroupID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$Groups,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$Templates,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$Interfaces,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][array]$Interfaces,
+		# [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$Interfaces,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
@@ -690,7 +701,7 @@ Function New-ZabbixHost {
 		
 		if ($TemplateID.count -gt 5) {write-host "`nOnly up to 5 templates are allowed." -f red -b yellow; return} 
 		
-		if ($GroupID) {
+		if ($psboundparameters.GroupID) {
 			$Body = @{
 				method = "host.create"
 				params = @{
@@ -706,6 +717,7 @@ Function New-ZabbixHost {
 					groups = @{
 						groupid = $GroupID
 					}
+					# groups = $groups
 					status = $Status
 					templates = @(
 						@{templateid = $TemplateID[0]}
@@ -721,7 +733,7 @@ Function New-ZabbixHost {
 				id = $id
 			}
 		}
-		elseif ($interfaces) {
+		elseif ($psboundparameters.interfaces) {
 			$Body = @{
 				method = "host.create"
 				params = @{
@@ -758,6 +770,7 @@ Function New-ZabbixHost {
 					}
 					groups = $groups
 					status = $Status
+					# interfaces = $interfaces
 					templates = @(
 						@{templateid = $TemplateID[0]}
 						@{templateid = $TemplateID[1]}
@@ -801,22 +814,26 @@ Function Remove-ZabbixHost {
 		Remove-ZabbixHost @zabSessionParams -HostID (Get-ZabbixHost @zabSessionParams -HostName HostRetired).hostid
 		Remove single host by name (exact amtch, case sensitive)
 	.Example
-		Get-ZabbixHost  @zabSessionParams | ? name -eq HostName | Remove-ZabbixHost @zabSessionParams -WhatIf
-		Remove single host (check only: -WhatIf)
+		Get-ZabbixHost @zabSessionParams | ? name -eq HostName | Remove-ZabbixHost @zabSessionParams -WhatIf
+		Remove hosts (check only: -WhatIf)
      .Example
-		Get-ZabbixHost  @zabSessionParams | ? name -eq HostName | Remove-ZabbixHost @zabSessionParams
+		Get-ZabbixHost @zabSessionParams | ? name -eq HostName | Remove-ZabbixHost @zabSessionParams
 		Remove single host
 	.Example
-		Get-ZabbixHost @zabSessionParams | ? name -match "HostName-0[1-8]" | %{Remove-ZabbixHost @zabSessionParams -HostID $_.hostid}
+		Get-ZabbixHost @zabSessionParams | ? name -match HostName0[1-8] | Remove-ZabbixHost @zabSessionParams
+		Remove multiple hosts 
+	.Example
+		Get-ZabbixHost @zabSessionParams | ? name -match "HostName0[1-8]" | %{Remove-ZabbixHost @zabSessionParams -HostID $_.hostid}
 		Delete multiple hosts 
 	.Example
-		Get-ZabbixHost @zabSessionParams | ? name -match HostName | Remove-ZabbixHost @zabSessionParams
-		Remove multiple hosts
+		Get-ZabbixHost @zabSessionParams | Remove-ZabbixHost @zabSessionParams
+		Will delete ALL hosts from Zabbix 
 	#>
 	
     [CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
 	Param (
-        [Parameter(Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$true)][array]$HostID,
+		[Alias("Delete-ZabbixHost")]
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$HostID,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id,
@@ -833,7 +850,8 @@ Function Remove-ZabbixHost {
 
 		$Body = @{
 			method = "host.delete"
-			params = @($HostID)
+			params = $HostID
+			# params = $HostID
 			jsonrpc = $jsonrpc
 			id = $id
 			auth = $session
@@ -872,11 +890,14 @@ Function Get-ZabbixTemplate {
 		Get-ZabbixTemplate @zabSessionParams -TemplateName "Template OS Windows"
 		Get template by name (case sensitive)
 	.Example
-		Get-ZabbixHost @zabSessionParams | ? name -match os | Get-ZabbixTemplate @zabSessionParams | select templateid,name -Unique
-		Get templates by name match (case insensitive)
+		Get-ZabbixTemplate @zabSessionParams | ? name -match OS | select templateid,name -Unique
+		Get template by name (case insensitive)
 	.Example
 		Get-ZabbixTemplate @zabSessionParams | ? {$_.hosts.host -match "host"} | select templateid,name
 		Get templates linked to host by hostname.
+	.Example
+		Get-ZabbixTemplate @zabSessionParams | ? name -eq "Template OS Linux" | select -ExpandProperty hosts | select host,jmx_available,*error* | ft -a
+		Get template and all hosts status, template linked to
 	#>
     
 	[CmdletBinding()]
@@ -929,9 +950,9 @@ Function Get-ZabbixTemplate {
 Function Get-ZabbixGroup {
 	<#
 	.Synopsis
-		Get all server groups
+		Get server groups
 	.Description
-		Get all server groups
+		Get server groups
 	.Parameter GroupName
 		Filter by name of the group
 	.Parameter GroupID
@@ -944,7 +965,7 @@ Function Get-ZabbixGroup {
 		Get hosts from group (case sensitive)
 	.Example
 		(Get-ZabbixGroup @zabSessionParams | ? name -match somegroup).hosts
-		Get group and hosts (cas insensitive)
+		Get group and hosts (case insensitive)
 	.Example
 		Get-ZabbixGroup @zabSessionParams | ? name -match somegroup | select name -ExpandProperty hosts | ft -a
 		Get group and the hosts
@@ -1045,7 +1066,7 @@ Function Get-ZabbixMaintenance {
 		Get hosts from maintenance (case sensitive)
 	.Example
 		(Get-ZabbixMaintenance @zabSessionParams -MaintenanceName MaintenanceName).hostid  
-		Get HostIDs of hosta from maintenance (case sensitive)
+		Get HostIDs of hosts from maintenance (case sensitive)
 	.Example
 		Get-ZabbixMaintenance @zabSessionParams | ? name -match maintenance | select Name,@{n="TimeperiodStart";e={(convertfrom-epoch $_.timeperiods.start_date).addhours(-5)}},@{n="Duration(hours)";e={$_.timeperiods.period/3600}}
 		Get timeperiods from maintenance (case insensitive), display name, timeperiod (according UTC-5) and duration
@@ -1373,13 +1394,13 @@ Function Get-ZabbixAlert {
 		HostID
 	.Example
 		Get-ZabbixAlert @zabSessionParams | ? sendto -match email | select @{n="Time(UTC)";e={convertfrom-epoch $_.clock}},alertid,sendto,subject 
-		Get alarms from last 5 hours (default). Time display in UTC/GMT (default) 
+		Get alerts from last 5 hours (default). Time display in UTC/GMT (default) 
 	.Example
 		Get-ZabbixAlert @zabSessionParams | ? sendto -match email | select @{n="Time(UTC+1)";e={(convertfrom-epoch $_.clock).addhours(+1)}},alertid,subject
-		Get alarms from last 5 hours (default). Time display in UTC+1
+		Get alerts from last 5 hours (default). Time display in UTC+1
 	.Example
 		Get-ZabbixAlert @zabSessionParams | ? sendto -match email | select @{n="Time(UTC-5)";e={(convertfrom-epoch $_.clock).addhours(-5)}},alertid,subject
-		Get alarms from last 5 hours (default). Time display in UTC-5
+		Get alerts from last 5 hours (default). Time display in UTC-5
 	.Example
 		Get-ZabbixAlert @zabSessionParams | ? sendto -match email | ? subject -match OK | select @{n="Time(UTC)";e={convertfrom-epoch $_.clock}},alertid,sendto,subject 
 		Get alerts with OK status
@@ -1390,8 +1411,8 @@ Function Get-ZabbixAlert {
 		Get-ZabbixAlert @zabSessionParams -TimeFrom (convertTo-epoch (((get-date).ToUniversalTime()).addhours(-5))) -TimeTill (convertTo-epoch ((get-date).ToUniversalTime()).addhours(0)) | ? sendto -match mail | select @{n="Time UTC";e={convertfrom-epoch $_.clock}},alertid,sendto,subject 
 		Get alerts for last 5 hours
 	.Example
-		Get-ZabbixHost @zabSessionParams | ? name -match "server-01" | Get-ZabbixAlert @zabSessionParams | ? sendto -match mail | select @{n="Time(UTC-5)";e={(convertfrom-epoch $_.clock).addhours(-5)}},alertid,subject
-		Works for single host (name case insensitive). Get alerts for host from last 5 hours (default). Display time in UTC-5 
+		Get-ZabbixHost @zabSessionParams | ? name -match "hosts" | Get-ZabbixAlert @zabSessionParams | ? sendto -match mail | select @{n="Time(UTC-5)";e={(convertfrom-epoch $_.clock).addhours(-5)}},alertid,subject
+		Get alerts for hosts from last 5 hours (default). Display time in UTC-5 
 	.Example
 		Get-ZabbixHost @zabSessionParams -HostName "Server-01" | Get-ZabbixAlert @zabSessionParams -ea silent | ? sendto -match email | select @{n="Time(UTC-5)";e={(convertfrom-epoch $_.clock).addhours(-5)}},alertid,subject
 		Works for single host (name case sensitive). Get alerts for host from last 5 hours (default). Display time in UTC-5
@@ -1538,7 +1559,7 @@ Function Remove-ZabbixUser {
 		Delete one user
 	.Example
 		Get-ZabbixUser @zabSessionParams | ? alias -match "alias"  | Remove-ZabbixUser @zabSessionParams
-		Remove users by alias match
+		Remove multiple users by alias match
 	.Example
 		Remove-ZabbixUser @zabSessionParams -UserID (Get-ZabbixUser @zabSessionParams | ? alias -match "alias").userid
 		Delete multiple users by alias match
@@ -1589,11 +1610,14 @@ Function Set-ZabbixUser {
 	.Parameter UserID
 		UserID
 	.Example
+		Get-ZabbixUser @zabSessionParams | ? alias -eq "alias" | Set-ZabbixUser @zabSessionParams -Name NewName -Surname NewSurname -rows_per_page 100
+		Set user's properties
+	.Example
 		Get-ZabbixUser @zabSessionParams | ? alias -match "alias" | Set-ZabbixUser @zabSessionParams -Name NewName -Surname NewSurname -rows_per_page 100
-		Set user properties
+		Same as above for multiple users
 	.Example
 		Get-Zabbixuser @zabSessionParams | ? alias -match "alias" | Set-ZabbixUser @zabSessionParams -usrgrps (Get-ZabbixUserGroup @zabSessionParams | ? name -match disable).usrgrpid
-		Disable user (by moving him to usrgrp Disabled)
+		Disable users (by moving him to usrgrp Disabled)
 	.Example
 		Get-ZabbixUser @zabSessionParams -getAccess | ? alias -match "user" | Set-ZabbixUser @zabSessionParams -type 1 -Verbose
 		Set user type (Zabbix User - 1, Zabbix Admin - 2, Zabbix Super Admin - 3 )
@@ -1669,13 +1693,13 @@ Function New-ZabbixUser {
 		Import-Csv C:\zabbix-users.csv | %{New-ZabbixUser @zabSessionParams -Name $_.Name -Surname $_.Surname -Alias $_.alias -passwd $_.passwd -sendto $_.sendto -MediaActive $_.MediaActive -rows_per_page $_.rows_per_page -Refresh $_.refresh -usrgrps (Get-ZabbixUserGroup @zabSessionParams | ? name -match "guest").usrgrpid}
 		Mass create new users
 	.Example
-		Get-ZabbixUser @zabSessionParams | ? alias -match "SourceUser" | New-ZabbixUser @zabSessionParams -Name NewName -Surname NewSurname -Alias first.last -passwd "123456" -sendto first@first.com -MediaActive 0 -rows_per_page 100 -Refresh 300
+		Get-ZabbixUser @zabSessionParams | ? alias -eq "SourceUser" | New-ZabbixUser @zabSessionParams -Name NewName -Surname NewSurname -Alias first.last -passwd "123456" -sendto first@first.com -MediaActive 0 -rows_per_page 100 -Refresh 300
 		Clone user. Enable media (-UserMediaActive 0)
 	.Example
-		Get-Zabbixuser @zabSessionParams | ? alias -match "SourceUser" | New-ZabbixUser @zabSessionParams -Name NewName -Surname NewSurname -Alias first.last -passwd "123456"
+		Get-Zabbixuser @zabSessionParams | ? alias -eq "SourceUser" | New-ZabbixUser @zabSessionParams -Name NewName -Surname NewSurname -Alias first.last -passwd "123456"
 		Clone user
 	.Example
-		Get-ZabbixUser @zabSessionParams | ? alias -match "User" | New-ZabbixUser @zabSessionParams -Name NewName -Surname NewSurname -Alias first.last -passwd "123456" -usrgrps (Get-ZabbixUserGroup @zabSessionParams | ? name -match disabled).usrgrpid
+		Get-ZabbixUser @zabSessionParams | ? alias -match "SourceUser" | New-ZabbixUser @zabSessionParams -Name NewName -Surname NewSurname -Alias first.last -passwd "123456" -usrgrps (Get-ZabbixUserGroup @zabSessionParams | ? name -match disabled).usrgrpid
 		Clone user, but disable it (assign to usrgrp Disabled)
 	#>	
 	
@@ -1782,6 +1806,9 @@ Function Get-ZabbixUserGroup {
 		Get-ZabbixUserGroup  @zabSessionParams | select usrgrpid,name
 		Get groups
 	.Example
+		Get-ZabbixUserGroup @zabSessionParams | ? name -match administrators | select -ExpandProperty users | ft -a
+		Get user in Administrators group
+	.Example
 		(Get-ZabbixUserGroup @zabSessionParams | ? name -match administrators).users | select alias,users_status
 		Get users in group.
 	#>
@@ -1842,7 +1869,7 @@ Function Get-ZabbixTrigger {
 		To filter by ID of the trigger
 	.Example
         Get-ZabbixTrigger @zabSessionParams | ? status -eq 0 | ? expression -match fs.size | select status,description,expression | sort description
-        Get enabled triggers
+        Get enabled triggers fs.size 
 	.Example
 		Get-ZabbixTemplate @zabSessionParams | ? name -match "TemplateName" | Get-ZabbixTrigger @zabSessionParams | select description,expression
 		Get triggers from template
@@ -1929,6 +1956,9 @@ Function Set-ZabbixTrigger {
 		Get-ZabbixTrigger @zabSessionParams -TemplateID (Get-zabbixTemplate @zabSessionParams | ? name -match "Template Name").templateid | ? description -match "trigger description" | Set-ZabbixTrigger @zabSessionParams -status 1
 		Disable trigger
 	.Example
+		Get-ZabbixHost @zabSessionParams | ? name -match server0[1-5,7] | Get-ZabbixTrigger @zabSessionParams -ea silent | ? status -match 0 | ? expression -match "uptime" | select triggerid,expression,status | Set-ZabbixTrigger @zabSessionParams -status 1
+		Disable trigger on multiple hosts
+	.Example
 		Get-ZabbixTemplate @zabSessionParams | ? name -match "Template" | Get-ZabbixTrigger @zabSessionParams | ? description -match triggerDescription | Set-ZabbixTrigger @zabSessionParams -status 0
 		Enable trigger
 	#>
@@ -1969,7 +1999,7 @@ Function Set-ZabbixTrigger {
 		
 
 		$BodyJSON = ConvertTo-Json $Body
-		write-host $BodyJSON
+		write-verbose $BodyJSON
 		
 		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
 		if ($a.result) {$a.result} else {$a.error}
@@ -2105,6 +2135,9 @@ Function Get-ZabbixApplication {
 		Get-ZabbixApplication @zabSessionParams | ? name -match "appname" | ? hosts -match host | ft -a applicationid,name,hosts
 		Get applications by name and by hostname matches 
 	.Example
+		Get-ZabbixTemplate @zabSessionParams | ? name -match Template | Get-ZabbixApplication @zabSessionParams  | ft -a applicationid,name,hosts
+		Get application and template
+	.Example
 		Get-ZabbixApplication @zabSessionParams -TemplateID (Get-ZabbixTemplate @zabSessionParams | ? name -match templateName).templateid | ? name -match "" | ft -a applicationid,name,hosts
 		Get applications by TemplateID
 	.Example
@@ -2199,8 +2232,8 @@ Function Get-ZabbixHttpTest {
 		(Get-ZabbixTemplate @zabSessionParams ) | ? name -eq "Template Name" | get-ZabbixHttpTest @zabSessionParams | select name,steps
 		Get web/http tests by template name 
 	.Example 
-		Get-ZabbixHost @zabSessionParams | ? name -match host | Get-ZabbixHttpTest @zabSessionParams | select name
-		Get web/http tests for hostname match (works for single host)
+		Get-ZabbixHost @zabSessionParams | ? name -match host | Get-ZabbixHttpTest @zabSessionParams  | select name -ExpandProperty steps -ea 0 
+		Get web/http tests for hostname match
 	.Example
 		Get-ZabbixHttpTest @zabSessionParams -HostID (Get-ZabbixHost @zabSessionParams | ? name -eq hostnname).hostid | ? name -match "httpTest" | fl httptestid,name,steps
 		Get web/http test for host by name (case insensitive), and filter web/hhtp test by test name match (case insensitive)
@@ -2559,7 +2592,7 @@ Function Get-ZabbixHostInterface {
 	.Description
 		Get host interface
 	.Example
-		Get-ZabbixHostInterface @zabSessionParams -HostID (Get-ZabbixHost @zabSessionParams -HostName ThisHost).hostid
+		Get-ZabbixHostInterface @zabSessionParams -HostID (Get-ZabbixHost @zabSessionParams -HostName ThisHost).hostid |ft -a
 		Get interface(s) for single host (case sensitive)
 	.Example	
 		Get-ZabbixHostInterface @zabSessionParams -HostID (Get-ZabbixHost @zabSessionParams | ? name -match hostName).hostid
@@ -2568,7 +2601,7 @@ Function Get-ZabbixHostInterface {
 		Get-ZabbixHost @zabSessionParams -HostName HostName | Get-ZabbixHostInterface @zabSessionParams | ft -a
 		Get interfaces for host
 	.Example	
-		Get-ZabbixHost @zabSessionParams | ? name -match HostName | Get-ZabbixHostInterface @zabSessionParams | ft -a
+		hGet-ZabbixHost @zabSessionParams | ? name -match HostName | Get-ZabbixHostInterface @zabSessionParams | ft -a
 		Get interfaces for multiple hosts
 	.Example	
 		Get-ZabbixHost @zabSessionParams | ? name -match HostName | Get-ZabbixHostInterface @zabSessionParams | ? port -match 10050 | ft -a
@@ -2860,11 +2893,11 @@ Function Get-ZabbixItem {
 		Get-ZabbixItem @zabSessionParams -HostId (Get-ZabbixHost @zabSessionParams | ? name -match hostName).hostid | ? key_ -match "Version|ProductName" | ? key_ -notmatch "vmver" | select @{n="Time(UTC+1)";e={(convertfrom-epoch $_.lastclock).addhours(+1)}},@{n="host";e={$_.hosts.name}},lastvalue,name,key_ | sort host,key_ | ft -a
 		Get Items by host match, by key_ match/notmatch
 	.Example
-		Get-ZabbixHost -hostname hostName @zabSessionParams | Get-ZabbixItem @zabSessionParams -SortBy status -ItemKey pfree | select name, key_,@{n="Time(UTC)"e={convertfrom-epoch $_.lastclock}},lastvalue,status | ft -a
+		Get-ZabbixHost -hostname hostName @zabSessionParams | Get-ZabbixItem @zabSessionParams -SortBy status -ItemKey pfree | select name, key_,@{n="Time(UTC)";e={convertfrom-epoch $_.lastclock}},lastvalue,status | ft -a
 		Get Items (disk usage(%) information) for single host
 	.Example
-		Get-ZabbixHost @zabSessionParams | ? name -match "hostName" | Get-ZabbixItem @zabSessionParams -ItemName 'RAM Utilization (%)' | select @{n="hostname";e={$_.hosts.name}},name,key_,@{n="Time(UTC+1)";e={(convertfrom-epoch $_.lastclock).addhours(+1)}},prevvalue,lastvalue | ft -a
-		Get Items for single host by match
+		Get-ZabbixHost @zabSessionParams | ? name -match "hosts" | Get-ZabbixItem @zabSessionParams -ItemName 'RAM Utilization (%)' | select @{n="hostname";e={$_.hosts.name}},name,key_,@{n="Time(UTC+1)";e={(convertfrom-epoch $_.lastclock).addhours(+1)}},prevvalue,lastvalue | sort hostname | ft -a
+		Get Items for multiple hosts by match
 	.Example
 		Get-ZabbixItem @zabSessionParams -SortBy status -ItemKey pfree -HostId (Get-ZabbixHost @zabSessionParams | ? name -match hostName).hostid | select @{n="hostname";e={$_.hosts.name}},@{n="Time(UTC)";e={convertfrom-epoch $_.lastclock}},status,key_,lastvalue,name | sort hostname,key_ | ft -a
 		Get Items (disk usage(%) info) for multiple hosts

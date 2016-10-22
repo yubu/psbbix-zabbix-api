@@ -291,4 +291,3 @@ Get-ZabbixHttpTest @zabSessionParams -HttpTestName httpTest | Set-ZabbixHttpTest
 Remove-ZabbixHttpTest @zabSessionParams -HttpTestID (Get-ZabbixTemplate @zabSessionParams | ? name -eq "Template Name" | Get-ZabbixHttpTest @zabSessionParams | ? name -match httpTests).httptestid
 ## delete http tests
 ```
-

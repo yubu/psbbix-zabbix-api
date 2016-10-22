@@ -3110,7 +3110,7 @@ Function Save-ZabbixGraph {
 		Save multiple grpahs for multiple hosts
 	.Example
 		(Get-ZabbixGraph @zabSessionParams -HostID (Get-ZabbixHost @zabSessionParams | ? name -match "multipleHosts").hostid | ? name -match 'RAM utilization | CPU utilization').graphid | %{Save-ZabbixGraph -GraphID $_ -sTime (convertto-epoch (get-date -date "05/25/2015 00:00")) -show -mail -from "zabbix@domain.com" -to first.last@mail.com -smtpserver 10.10.20.10 -proprity High}
-		Save and send by email multiple grpahs, for multiple hosts
+		Save and send by email multiple graphs, for multiple hosts
     #>
     
 	[cmdletbinding()]

@@ -42,8 +42,10 @@ help get-zabbixhost -ex | out-string | remove-emptyLines
 Get-ZabbixHelp help
 gzh -list                                       # List module functions
 gzh -alias                                      # List module aliases
+gzh *                                           # Get all examples
 gzh item -pattern "cassandra|entropy" 
 gzh alert -pattern "example 4"
+gzh graph -p path
 ```
 ##### Connect
 ```powershell

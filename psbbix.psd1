@@ -105,13 +105,13 @@ PrivateData = @{
         # LicenseUri = ''
 
         # A URL to the main website for this project.
-        # ProjectUri = 'https://github.com/yubu/psbbix-zabbix-api'
+        ProjectUri = 'https://github.com/yubu/psbbix-zabbix-api'
 
         # A URL to an icon representing this module.
         # IconUri = ''
 
         # ReleaseNotes of this module
-        # ReleaseNotes = 'https://github.com/yubu/psbbix-zabbix-api/blob/master/CHANGELOG.md'
+        ReleaseNotes = 'https://github.com/yubu/psbbix-zabbix-api/blob/master/CHANGELOG.md'
 
     } # End of PSData hashtable
 

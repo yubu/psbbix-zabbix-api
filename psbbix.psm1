@@ -2926,7 +2926,7 @@ Function Get-ZabbixItem {
         Cassandra: Get-ZabbixItem @zabSessionParams -ItemName 'byte' -HostId (Get-ZabbixHost @zabSessionParams | ? name -match "cassandraNodes").hostid | select @{n="hostname";e={$_.hosts.name}},key_,@{e={(convertfrom-epoch $_.lastclock).addhours(+1)};n="Time"},@{n="prevvalue";e={[math]::round(($_.prevvalue/1gb),2)}},@{n="lastvalue";e={[math]::round(($_.lastvalue/1gb),2)}} | sort hostname | ft -a
 	#>
 	
-	[cmdletbinding()]
+	[CmdLetBinding(DefaultParameterSetName="None")]
 	Param (
 		[String]$SortBy="name",
 		[String]$ItemKey,

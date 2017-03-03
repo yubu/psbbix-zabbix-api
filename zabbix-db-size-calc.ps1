@@ -51,4 +51,4 @@ function Get-zabbixDBsize {
 	
 	write-host "Zabbix projected DBSize in GB = $("{0:N2}" -f $totalDBSizeGB)" -f cyan
 	write-host "Zabbix projected DBSize in MB = $("{0:N2}" -f $totalDBSizeMB)" -f cyan
-}
+} 

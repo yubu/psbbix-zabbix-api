@@ -47,4 +47,4 @@ Function convertTo-epoch {
 	
     $date=$date -f "mm/dd/yyyy hh:mm"
 	(New-TimeSpan -Start (Get-Date -Date "01/01/1970") -End $date).TotalSeconds
-}
+} 

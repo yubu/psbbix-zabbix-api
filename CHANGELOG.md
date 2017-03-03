@@ -1,4 +1,8 @@
 # Changelog
+#### [0.1.8] - 2017-03-03
+#### Fixed 
+- Get-ZabbixItem error when running with no parameters
+
 #### [0.1.7-bf] - 2016-10-22
 #### Fixed
 - Cosmetic fixes
@@ -33,4 +37,3 @@
 #### [0.1.2] - 2016-09-12
 #### Added
 - Added `psbbix.psd1` for support with the [PowerShellGallery](https://www.powershellgallery.com)
-

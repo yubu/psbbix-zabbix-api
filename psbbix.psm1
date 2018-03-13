@@ -123,12 +123,17 @@ Function New-ZabbixSession {
     )
     
 	# if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+	
+	$Username = $PSCredential.Username
+	if($Username.Substring(0,1) -eq '\') {
+		$Username = $Username.Substring(1)
+	}
 
 	$Body = @{
 	    jsonrpc = "2.0"
 	    method = "user.login"
 	    params = @{
-		    user = $PSCredential.UserName
+		    user = $UserName
 		    password = $PSCredential.GetNetworkCredential().Password
 	    }
 	    id = 1

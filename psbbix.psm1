@@ -1917,6 +1917,7 @@ Function Get-ZabbixTrigger {
 				selectLastEvent = "extend"
 				selectGroups = "extend"
 				selectHosts = "extend"
+				selectDependencies = "extend"
 				expandDescription = $ExpandDescription
 				expandExpression = $ExpandExpression
 				triggerids = $TriggerID

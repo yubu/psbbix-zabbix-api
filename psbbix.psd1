@@ -12,7 +12,7 @@
 RootModule = 'psbbix.psm1'
 
 # Version number of this module.
-ModuleVersion = '0.1.8'
+ModuleVersion = '0.2.0'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
@@ -27,7 +27,7 @@ Author = 'yubu'
 CompanyName = 'Unknown'
 
 # Copyright statement for this module
-Copyright = '(c) 2016 yubu. All rights reserved.'
+Copyright = '(c) 2019 yubu. All rights reserved.'
 
 # Description of the functionality provided by this module
 Description = 'Powershell Zabbix API'
@@ -112,6 +112,9 @@ PrivateData = @{
 
         # ReleaseNotes of this module
         ReleaseNotes = 'https://github.com/yubu/psbbix-zabbix-api/blob/master/CHANGELOG.md'
+
+        # Prerelease information
+        Prerelease = 'alpha1'
 
     } # End of PSData hashtable
 

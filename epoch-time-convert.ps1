@@ -6,15 +6,27 @@ Function convertFrom-epoch {
 		Convert from epoch time to human
 	.Example
 		convertFrom-epoch 1295113860
-    .Example 
-        convertFrom-epoch 1295113860 | convertTo-epoch
+	.Example
+		convertFrom-epoch 1295113860 | convertTo-epoch
 	#>
-    [CmdletBinding()]
+	[CmdletBinding()]
 	param ([Parameter(ValueFromPipeline=$true)]$epochdate)
-    
-	if (!$psboundparameters.count) {help -ex convertFrom-epoch | Out-String | Remove-EmptyLines; return}
-	if (("$epochdate").length -gt 10 ) {(Get-Date -Date "01/01/1970").AddMilliseconds($epochdate)}
-	else {(Get-Date -Date "01/01/1970").AddSeconds($epochdate)}
+
+	process {
+		if (!$psboundparameters.count) {gh -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | remove-emptylines; return}
+		#[timezone]::CurrentTimeZone.ToLocalTime(([datetime]'1/1/1970').AddSeconds($epochdate)) 
+		if (("$epochdate").length -gt 10 ) {
+			# (Get-Date -Date "01/01/1970").AddMilliseconds($epochdate)
+			if (("$epochdate").Contains('.')) {
+				$seconds=("$epochdate").Split('.')[0]
+				$millis=("$epochdate").Split('.')[1]
+				$epochdate=$seconds+($millis[0..2] -join "")
+				(Get-Date -Date "01/01/1970").AddMilliseconds($epochdate)
+			}
+			else {(Get-Date -Date "01/01/1970").AddMilliseconds($epochdate)}
+		}
+		else {(Get-Date -Date "01/01/1970").AddSeconds($epochdate)}
+	}
 }
 
 Function convertTo-epoch {

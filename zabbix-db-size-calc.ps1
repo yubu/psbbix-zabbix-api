@@ -1,5 +1,6 @@
 #Zabbix DB Size calculator
 #https://www.zabbix.com/documentation/2.4/manual/installation/requirements#database_size
+
 function Get-zabbixDBsize {
 	param ($items, $history, $refreshRate=60, $trendsYears=3, $valuesPerSec)
 	

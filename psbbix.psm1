@@ -636,11 +636,14 @@ Function New-ZabbixHost {
 		Import-Csv c:\new-servers.csv | %{New-ZabbixHost -HostName $_.Hostname -IP $_.IP -GroupID $_.GroupID -TemplateID $_.TemplateID -status $_.status}
 		Mass create new hosts
 	.Example
-		Get-ZabbixHost | ? name -match SourceHost | New-ZabbixHost -HostName NewHost -IP 10.20.10.10
+		Get-ZabbixHost | ? name -match SourceHost | New-ZabbixHost -HostName NewHost -IP 10.20.10.10 -TemplateID (Get-ZabbixHost | ? name -match "SourceHost").parentTemplates.templateid
 		Clone host with single interface
 	.Example
 		(1..9) | %{Get-ZabbixHost | ? name -match sourcehost | New-ZabbixHost -HostName NewHost0$_ -IP 10.20.10.1$_ -GroupID 8 -TemplateID "10081","10166" -status 1 -verbose}
 		Clone 1 host to multiple new with single interface
+	.Example
+		Import-Csv c:\clone-servers.csv | %{Get-ZabbixHost | ? name -match SourceHost | New-ZabbixHost -HostName $_.Hostname -IP $_.IP -TemplateID (Get-ZabbixHost | ? name -match "SourceHost").parentTemplates.templateid -status 1}
+		Mass clone from master template 
 	.Example 
 		Get-ZabbixHost | ? name -match SourceHost | New-ZabbixHost -HostName NewHost -IP 10.20.10.10 -TemplateID (Get-ZabbixHost | ? name -match "SourceHost").parentTemplates.templateid -status 1
 		Clone host with linked templates, while new host will be disabled
@@ -651,7 +654,7 @@ Function New-ZabbixHost {
 		Clone the host with multiple interfaces, then update interfaces with new IP, then check the interfaces
 	.Example
 		Clone:
-		Get-ZabbixHost | ? name -match SourceHost | New-ZabbixHost -HostName MewHostname -IP 10.20.10.10 -TemplateID (Get-ZabbixHost | ? name -match "SourceHost").parentTemplates.templateid -verbose -interfaces (Get-ZabbixHostInterface -HostID (Get-ZabbixHost -HostName SourceHost).hostid) -status 1
+		Get-ZabbixHost | ? name -match SourceHost | New-ZabbixHost -HostName NewHostname -IP 10.20.10.10 -TemplateID (Get-ZabbixHost | ? name -match "SourceHost").parentTemplates.templateid -verbose -interfaces (Get-ZabbixHostInterface -HostID (Get-ZabbixHost -HostName SourceHost).hostid) -status 1
 		Replace IP for each interface:
 		Get-ZabbixHost | ? name -match SourceHost | Get-ZabbixHostInterface | %{Set-ZabbixHostInterface -InterfaceID $_.interfaceid -IP 10.20.10.10 -Port $_.port -HostID $_.hostid -main $_.main}
 		Check Interfaces:
@@ -672,7 +675,8 @@ Function New-ZabbixHost {
 		Check whether template works:
 		Get-ZabbixItem -HostId (Get-ZabbixHost | ? name -match NewHostName).hostid | ? key_ -match "Version|ProductName|HeapMemoryUsage.used" | ? key_ -notmatch "vmver" | select @{n="lastclock";e={(convertfrom-epoch $_.lastclock).addhours(+1)}},@{n="host";e={$_.hosts.name}},@{n="Application";e={$_.applications.name}},lastvalue,key_ | sort host,application,key_ | ft -a
 
-		Clone host with multiple JMX interfaces, step by step. May not be comatible with your environment.
+		Clone host with multiple JMX interfaces, step by step. May not be comatible with your environment. This also needed for pre Zabbix version 3.0.
+		From version 3.0 multiple JMX interfaces per host were introduced. 
 		In this scenario we clone host with multiple JMX interfaces. To each JMX interface will be linked specific to this interface JMX template.
 		It can be done only if we will link JMX template to the interface, marked default (-main 1)   
 	#>
@@ -690,7 +694,7 @@ Function New-ZabbixHost {
 		# [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$GroupID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$Groups,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][string]$ProxyHostID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][string]$ProxyHostID=0,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$Templates,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][array]$Interfaces,
 		# [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$Interfaces,
@@ -841,7 +845,7 @@ Function Remove-ZabbixHost {
 		Remove hosts by IDs
 	.Example
 		Remove-ZabbixHost -HostID (Get-ZabbixHost -HostName HostRetired).hostid
-		Remove single host by name (exact amtch, case sensitive)
+		Remove single host by name (exact match, case sensitive)
 	.Example
 		Get-ZabbixHost | ? name -eq HostName | Remove-ZabbixHost -WhatIf
 		Remove hosts (check only: -WhatIf)
@@ -919,10 +923,16 @@ Function Get-ZabbixTemplate {
 		Get template by name (case insensitive)
 	.Example
 		Get-ZabbixTemplate | ? {$_.hosts.host -match "host"} | select templateid,name
-		Get templates linked to host by hostname.
+		Get templates linked to host by hostname
 	.Example
 		Get-ZabbixTemplate | ? name -eq "Template OS Linux" | select -ExpandProperty hosts | select host,jmx_available,*error* | ft -a
-		Get template and all hosts status, template linked to
+		Get hosts status per template
+	.Example
+		Get-ZabbixTemplate "Template OS Linux" | select -pv templ | select -ExpandProperty hosts | select @{n='Template';e={$templ.name}},Name,Status,Error
+		Get hosts status per template
+	.Example
+		Get-ZabbixHost | ? name -match hostName | Get-ZabbixTemplate | select name
+		Get templates for host
 	#>
     
 	[CmdletBinding()]
@@ -941,7 +951,7 @@ Function Get-ZabbixTemplate {
    
 	process {
 
-		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
@@ -2253,13 +2263,13 @@ Function Export-ZabbixConfig {
 		Export-ZabbixConfig -HostID (Get-ZabbixHost | ? name -match host).hostid | clip
 		Capture to clipboard exported hosts configurarion
 	.Example
-		Export-ZabbixConfig -HostID (Get-ZabbixHost | ? name -match host).hostid | sc c:\zabbix-hosts-export.xml
+		Export-ZabbixConfig -HostID (Get-ZabbixHost | ? name -match host).hostid | sc c:\zabbix-hosts-export.xml -Encoding UTF8
 		Export hosts configuration to xml file
 	.Example
-		Export-ZabbixConfig -TemplateID (Get-ZabbixTemplate | ? name -match TemplateName).templateid | sc c:\zabbix-templates-export.xml
+		Export-ZabbixConfig -TemplateID (Get-ZabbixTemplate | ? name -match TemplateName).templateid | sc c:\zabbix-templates-export.xml -Encoding UTF8
 		Export template to xml file
 	.Example
-		Export-ZabbixConfig -TemplateID (Get-ZabbixHost | ? name -match windows).templateid | sc c:\zabbix-templates-export.xml
+		Export-ZabbixConfig -TemplateID (Get-ZabbixHost | ? name -match windows).templateid | sc c:\zabbix-templates-export.xml -Encoding UTF8
 		Export template configuration linked to sertain hosts from Zabbix server to xml file.
 	.Example
 		Get-ZabbixTemplate | ? name -match templateNames | Export-ZabbixConfig -Format json | sc C:\zabbix-templates-export.json
@@ -2427,6 +2437,9 @@ Function Get-ZabbixTrigger {
 	.Example
 		Get-ZabbixHost -HostName HostName | Get-ZabbixTrigger -ea silent | ? status -match 0 | ft -a status,templateid,description,expression
 		Get triggers for host (status 0 == enabled, templateid 0 == assigned directly to host, not from template) 
+	.Example
+		Get-ZabbixHost | ? name -match host | Get-ZabbixTrigger | select description,expression | ft -a -Wrap
+		Get triggers for host
 	#>
     
 	[CmdletBinding()]
@@ -3857,6 +3870,9 @@ Function New-ZabbixApplication {
 		Get-ZabbixHost | ? name -match "hostName" | New-ZabbixApplication -Name newAppName
 		Create new application on host
 	.Example
+		Get-ZabbixHost | ? name -match sourceHost | Get-ZabbixApplication | New-ZabbixApplication -HostID (Get-ZabbixHost | ? name -match newHost).hostid
+		Clone application(s) from host to host
+	.Example
 		New-ZabbixApplication -Name newAppName -HostID (Get-ZabbixTemplate | ? name -match template).hostid
 		Create new application in template
 	.Example
@@ -3867,7 +3883,7 @@ Function New-ZabbixApplication {
 	[CmdletBinding()]
 	[Alias("nzapp")]
 	Param (
-		[Parameter(Mandatory=$False)][string]$Name,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Name,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$HostID,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$TemplateID,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),

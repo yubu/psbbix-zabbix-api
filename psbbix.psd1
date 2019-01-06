@@ -5,7 +5,6 @@
 #
 # Generated on: 9/12/2016
 #
-
 @{
 
 # Script module or binary module file associated with this manifest.

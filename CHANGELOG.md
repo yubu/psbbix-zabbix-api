@@ -9,6 +9,7 @@
 - Connect-Zabbix
 - Disconnect-Zabbix
 - A lot of minor things
+
 ##### Added
 ```powershell
 Get-ZabbixEvent

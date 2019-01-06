@@ -36,7 +36,7 @@ git clone https://github.com/yubu/ps.testPassword.git
 Import-Module c:\temp\ps.passwordTest\ps.passwordTest.psm1
 ```
 ### Installation from Powershell Gallery 
-### Not in Gallery yet
+### (Not in Gallery yet!)
     Install-Module psbbix
 
 ### Installation from Powershell Gallery prerelease version

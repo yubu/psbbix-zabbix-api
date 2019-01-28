@@ -493,6 +493,9 @@ Function Set-ZabbixHost {
 	.Example
 		Get-ZabbixHost | ? name -match HostName | select hostid,host,status -ExpandProperty parentTemplates | ? name -match TemplateName | Set-ZabbixHost -removeTemplates -Verbose
 		Unlink(remove) specific template(s) from the host.
+	.Example
+		Get-ZabbixHost | ? name -match HostName | Set-ZabbixHost -description "Enter Text"
+		Update/Set description from host
 	#>	 
     
 	[CmdletBinding()]
@@ -507,7 +510,8 @@ Function Set-ZabbixHost {
 		[array]$HttpTestID,
 		[switch]$removeTemplates,
 		[Parameter(ValueFromPipelineByPropertyName=$true)][string]$status,
-		[Parameter(ValueFromPipelineByPropertyName=$true)][string]$ProxyHostID,
+		[Parameter(ValueFromPipelineByPropertyName=$true)][string]$description,
+		[Parameter(ValueFromPipelineByPropertyName=$true)][string]$ProxyHostID=0,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session=($global:zabSessionParams.session),
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id=($global:zabSessionParams.id),
@@ -581,6 +585,7 @@ Function Set-ZabbixHost {
 				params = @{
 					hostid = $HostID
 					status = $status
+					description = $description
 					parenttemplates = $parenttemplates
 					proxy_hostid = $ProxyHostID
 				}

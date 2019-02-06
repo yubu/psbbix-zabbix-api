@@ -16,19 +16,27 @@ function Remove-EmptyLines {
 	.Example
 		$var | Remove-EmptyLines
 	.Example
-		help -ex Remove-EmptyLines | out-string | Remove-EmptyLines 
+		help -ex Remove-EmptyLines | Remove-EmptyLines 
+	.Example
+		gc c:\*.txt | rmel
+	.Example
+		Get-ClipBoard | rmel
+	.Example
+		dir | oss | rmel
 	#>
 	
 	[cmdletbinding()]
     [Alias("rmel")]
     param ([Parameter(Mandatory=$false,Position=0,ValueFromPipeline=$true)][array]$in)
 	
-	if (!$psboundparameters.count) {
-		help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines
-		return
+	process {
+		if (!$psboundparameters.count) {
+			help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines
+			return
+		}
+		
+		$in.split("`r`n") | ? {$_.trim() -ne ""}
 	}
-	
-	$in.split("`r`n") | ? {$_.trim() -ne ""}
 }
 
 Function Get-ZabbixHelp {
@@ -344,7 +352,7 @@ Function Get-ZabbixHost {
 		Get-ZabbixHost | ? status -eq 0 | ? available -eq 0 | select hostid,name,status,available,jmx_available | ft -a
 		Get hosts, which are enabled, but unreachable
 	.Example
-		Get-ZabbixHost -GroupID (Get-ZabbixGroup -GroupName "DP").groupid | ? httpTests | select hostid,host,status,available,httptests | sort host | ft -a
+		Get-ZabbixHost -GroupID (Get-ZabbixGroup -GroupName "groupName").groupid | ? httpTests | select hostid,host,status,available,httptests | sort host | ft -a
 		Get host(s) by host group, match name "GroupName" (case sensitive)
 	.Example
 		Get-ZabbixHost -hostname HostName | Get-ZabbixItem -WebItems -ItemKey web.test.error -ea silent | select name,key_,lastclock
@@ -371,7 +379,7 @@ Function Get-ZabbixHost {
         Get-ZabbixHost | ? name -match hostName | select host -ExpandProperty interfaces | ? port -match 10050
         Get interfaces for the host(s)    
     .Example
-		Get-ZabbixHost | ? name -match runtime | Get-ZabbixHostInterface | ? port -match 10050 | ft -a
+		Get-ZabbixHost | ? name -match hostname | Get-ZabbixHostInterface | ? port -match 10050 | ft -a
 		Get interfaces for the host(s)	
 	.Example
 		Get-ZabbixHost | ? name -match hostsName | %{$n=$_.name; Get-ZabbixHostInterface -HostID $_.hostid} | select @{n="name";e={$n}},hostid,interfaceid,ip,port | sort name | ft -a
@@ -469,10 +477,22 @@ Function Set-ZabbixHost {
 		(1..9) | %{(Get-ZabbixHost | ? name -eq "host0$_") | Set-ZabbixHost -status 1}
 		Disable multiple hosts (-status 1)
 	.Example
-		Get-ZabbixHost | ? name -match "hostName" | %{Set-ZabbixHost -status 1 -HostID $_.hostid -parentTemplates $_.parenttemplates}
-		Disable multiple hosts
+		Get-ZabbixHost | ? name -match "hostName" | Set-ZabbixHost -status 0
+		Enable multiple hosts
 	.Example
-		Get-ZabbixHost -HostName HostName | Set-ZabbixHost -removeTemplates -TemplateID (Get-ZabbixHost -HostName "Host").parentTemplates.templateid
+		Get-ZabbixHost | ? name -match hostName | Set-ZabbixHost -GroupID 14,16 -status 0
+		Set HostGroups for host(s) and enable it
+	.Example
+		Get-ZabbixHost | ? name -eq hostName | Set-ZabbixHost -removeTemplates -WhatIf
+		WhatIf on delete of all templates from host
+	.Example
+		Get-ZabbixHost | ? name -eq hostName | Set-ZabbixHost -removeTemplates
+		Remove all linked templates from host
+	.Example
+		Get-ZabbixHost | ? name -eq hostName | Set-ZabbixHost -removeTemplates -TemplateID (Get-ZabbixTemplate | ? name -eq "TemplateFromCurrentHost").templateid -WhatIf
+		WhatIf on remove linked template from host
+	.Example
+		Get-ZabbixHost -HostName HostName | Set-ZabbixHost -removeTemplates -TemplateID (Get-ZabbixHost -HostName "HostName").parentTemplates.templateid
 		Unlink(remove) templates from host (case sensitive)
 	.Example
 		$templateID=(Get-ZabbixTemplate -HostID (Get-ZabbixHost | ? name -match hostname).hostid).templateid
@@ -482,32 +502,48 @@ Function Set-ZabbixHost {
 		Get-ZabbixHost | ? name -match hosts | Set-ZabbixHost -TemplateID $templateID 
 		Link(add) additional template(s) to already existing, step by step
 	.Example
+		$templateID=((Get-ZabbixHost | ? name -eq hostName).parentTemplates.templateid)+((Get-ZabbixTemplate | ? name -match mysql).templateid)
+		Get-ZabbixHost | ? name -ew hostName | Set-ZabbixHost -TemplateID $templateID 
+		Add new template to existing ones (not replace)
+	.Example
 		Get-ZabbixHost -HostName HostName | Set-ZabbixHost -TemplateID (Get-ZabbixHost -HostName SourceHost).parentTemplates.templateid
 		Link(add) templates to the host, according config of other host (case sensitive)
 	.Example
 		(1..9) | %{Get-ZabbixHost -HostName "Host0$_" | Set-ZabbixHost -TemplateID ((Get-ZabbixHost | ? name -match "sourcehost").parenttemplates.templateid)}
 		Link(add) templates to multiple hosts, according config of other host
-	.Example
-		Get-ZabbixHost | ? name -match HostName | select host,hostid,status -ExpandProperty parenttemplates | Set-ZabbixHost -removeTemplates
-		Unlink(remove) all templates from host
-	.Example
-		Get-ZabbixHost | ? name -match HostName | select hostid,host,status -ExpandProperty parentTemplates | ? name -match TemplateName | Set-ZabbixHost -removeTemplates -Verbose
-		Unlink(remove) specific template(s) from the host.
 	#>	 
     
-	[CmdletBinding()]
+	[CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
 	[Alias("szhst")]
 	Param (
-        [Alias("host")][Parameter(ValueFromPipelineByPropertyName=$true)]$HostName,
-        [Parameter(ValueFromPipelineByPropertyName=$true)]$HostID,
-		[Parameter(ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
-		[Parameter(ValueFromPipelineByPropertyName=$true)][array]$parentTemplates,
-		[Parameter(ValueFromPipelineByPropertyName=$true)][array]$templates,
-		[array]$GroupID,
-		[array]$HttpTestID,
+        [Alias("host")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$HostName,
+        [Alias("name")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$HostVisibleName,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$HostID,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][array]$GroupID,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$groups,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][array]$interfaceID,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$interfaces,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][array]$TemplateID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$parentTemplates,
+		# [Alias("parentTemplates")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$templates,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$templates,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)]$Inventory,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$HostDescription,
+		# Host inventory population mode: Possible values are: -1 - disabled; 0 - (default) manual; 1 - automatic.
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$InventoryMode,
+		# IPMI authentication algorithm: Possible values are: -1 - (default) default; 0 - none; 1 - MD2; 2 - MD5; 4 - straight; 5 - OEM; 6 - RMCP+
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$IpmiAuthtype,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$IpmiUsername,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$IpmiPassword,
+		# IPMI privilege level: Possible values are: 1 - callback; 2 - (default) user; 3 - operator; 4 - admin; 5 - OEM.
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$IpmiPrivilege,
+		# [array]$GroupID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$HttpTestID,
+		# Status and function of the host: Possible values are: 0 - (default) monitored host; 1 - unmonitored host
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$status,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$ProxyHostID,
 		[switch]$removeTemplates,
-		[Parameter(ValueFromPipelineByPropertyName=$true)][string]$status,
-		[Parameter(ValueFromPipelineByPropertyName=$true)][string]$ProxyHostID,
+
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session=($global:zabSessionParams.session),
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id=($global:zabSessionParams.id),
@@ -522,81 +558,63 @@ Function Set-ZabbixHost {
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
 
+		if ($TemplateID -eq 0) {$TemplateID=""}
+
 		# if ($TemplateID.count -gt 9) {write-host "`nOnly up to 5 templates are allowed." -f red -b yellow; return}
 		for ($i=0; $i -lt $TemplateID.length; $i++) {[array]$tmpl+=$(@{templateid = $($TemplateID[$i])})}
+		for ($i=0; $i -lt $GroupID.length; $i++) {[array]$grp+=$(@{groupid = $($GroupID[$i])})}
+		for ($i=0; $i -lt $interfaceID.length; $i++) {[array]$ifc+=$(@{interfaceid = $($interfaceID[$i])})}
 		
-		if ($removeTemplates) {
-			$Body = @{
-				method = "host.update"
-				params = @{
-					hostid = $HostID
-					status = $status
-					host = $HostName
-					templates_clear = @($tmpl)
-					# templates_clear = @(
-					# 	@{templateid = $TemplateID[0]}
-					# 	@{templateid = $TemplateID[1]}
-					# 	@{templateid = $TemplateID[2]}
-					# 	@{templateid = $TemplateID[3]}
-					# 	@{templateid = $TemplateID[4]}
-					# 	@{templateid = $TemplateID[5]}
-					# 	@{templateid = $TemplateID[6]}
-					# 	@{templateid = $TemplateID[7]}
-					# 	@{templateid = $TemplateID[8]}
-					# )
-				}
+		$Body = @{
+			method = "host.update"
+			params = @{
+				hostid = $HostID
+				status = $status
+				host = $HostName
+				name = $HostVisibleName
+				ipmi_authtype = $IpmiAuthtype
+				ipmi_username = $IpmiUsername
+				ipmi_password = $IpmiPassword
+				ipmi_privilege = $IpmiPrivilege
+				description = $HostDescription
+				inventory_mode = $InventoryMode
+				proxy_hostid = $ProxyHostID
+			}
 
-				jsonrpc = $jsonrpc
-				id = $id
-				auth = $session
-			}
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
 		}
-		elseif ($psboundparameters.TemplateID -and ($TemplateID -ne 0) -and ($TemplateID -ne $null)) { 
 
-			(Get-ZabbixHost | ? name -eq $HostName | select hostid,host,status -ExpandProperty parentTemplates).templateid | %{[array]$current+=$(@{templateid = $($_)})}
-			$tmpl+=($current | ? {$_})
-			$Body = @{
-				method = "host.update"
-				params = @{
-					hostid = $HostID
-					status = $status
-					templates = @($tmpl)
-					# templates = @(
-					# 	@{templateid = $TemplateID[0]}
-					# 	@{templateid = $TemplateID[1]}
-					# 	@{templateid = $TemplateID[2]}
-					# 	@{templateid = $TemplateID[3]}
-					# 	@{templateid = $TemplateID[4]}
-					# )
-				}
-				
-				jsonrpc = $jsonrpc
-				id = $id
-				auth = $session
-			}
-		}
-		else {
-			$Body = @{
-				method = "host.update"
-				params = @{
-					hostid = $HostID
-					status = $status
-					parenttemplates = $parenttemplates
-					proxy_hostid = $ProxyHostID
-				}
-				
-				jsonrpc = $jsonrpc
-				id = $id
-				auth = $session
-			}
-		
-		}
-		
+		if (!$TemplateID -and $removeTemplates) {$Body.params.templates_clear=$parentTemplates | select templateid}
+		if ($TemplateID -and $removeTemplates) {$Body.params.templates_clear=$tmpl | ?{$_}}
+		if ($TemplateID -and !$removeTemplates) {$Body.params.templates=$tmpl | ?{$_}}
+		# if (!($TemplateID -and $removeTemplates)) {$Body.params.parenttemplates=$parentTemplates}
+		if ($GroupID) {$Body.params.groups=$grp} else {$Body.params.groups=$groups}
+		if ($interfaceID) {$Body.params.interfaces=$ifc} else {$Body.params.interfaces=($interfaces)}
+
 		$BodyJSON = ConvertTo-Json $Body -Depth 3
 		write-verbose $BodyJSON
 		
-		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-		if ($a.result) {$a.result} else {$a.error}
+		if (!$removeTemplates) {
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+			if ($a.result) {$a.result} else {$a.error}
+		}
+		elseif ($removeTemplates -and !$TemplateID) {
+			if ([bool]$WhatIfPreference.IsPresent) {}
+			if ($PSCmdlet.ShouldProcess((($parentTemplates).name -join ", "),"Delete all linked templates from the host")) {  
+				$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+				if ($a.result) {$a.result} else {$a.error}
+			}
+		}
+		elseif ($removeTemplates -and $TemplateID) {
+			if ([bool]$WhatIfPreference.IsPresent) {}
+			if ($PSCmdlet.ShouldProcess(($parentTemplates | ? templateid -match (($tmpl).templateid -join "|")).name,"Delete linked templates")) {  
+				$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+				if ($a.result) {$a.result} else {$a.error}
+			}
+		}
+		
 	}
 }
 
@@ -621,8 +639,14 @@ Function New-ZabbixHost {
 	.Parameter MonitorByDNSName
 		If used, domain name of the host will used to connect
 	.Example
-		New-ZabbixHost -HostName NewHost -IP 10.20.10.10 -GroupID 8 -TemplateID "10081","10166"
-		Create new host (case sensitive), with two linked Templates	
+		New-ZabbixHost -HostName NewHost -IP 10.20.10.10 -GroupID 8,14 -TemplateID "10081","10166"
+		Create new host (case sensitive), with two linked Templates and member of two HostGroups	
+	.Example
+		New-ZabbixHost -HostName hostName -IP 10.20.10.10 -TemplateID (Get-ZabbixTemplate | ? name -eq "Template OS Windows").templateid -GroupID (Get-ZabbixGroup | ? name -eq "HostGroup").groupid -status 1
+		Create new host (case sensitive), with one linked Template, member of one HostGroup and disabled (-status 1)
+	.Example
+		New-ZabbixHost -HostName NewHost -IP 10.20.10.10 -TemplateID ((Get-ZabbixTemplate | ? name -match "Template OS Windows|Template OS Windows - Ext") -notmatch "Template OS Windows - Backup").templateid -GroupID (Get-ZabbixHostGroup | ? name -match "HostGroup1|HostGroup2").groupid -status 1 
+		Create new host (case sensitive), with two linked Templates, member of two HostGroups and disabled (-status 1)
 	.Example
 		New-ZabbixHost -HostName NewHost -IP 10.20.10.10 -GroupID 8 -TemplateID (Get-ZabbixHost | ? name -match "host").parentTemplates.templateid -status 0
 		Create new host (case sensitive), with multiple attached Templates and enable it (-status 0)
@@ -630,55 +654,20 @@ Function New-ZabbixHost {
 		New-ZabbixHost -HostName NewHost -IP 10.20.10.10 -GroupID 8 -TemplateID (Get-ZabbixHost | ? name -match "host").parentTemplates.templateid -status 1
 		Create new host (case sensitive), with multiple attached Templates and leave it disabled (-status 1)
 	.Example
-		Import-Csv c:\new-servers.csv | %{New-ZabbixHost -HostName $_.$Hostname -IP $_.IP -TemplateID "10081","10166" -GroupID 8}
+		New-ZabbixHost -HostName NewHost -IP 10.20.10.10 -TemplateID ((Get-ZabbixTemplate | ? name -match "Template OS Windows") -notmatch "Template OS Windows - Backup").templateid -verbose -GroupID (Get-ZabbixGroup | ? name -match "HostGroup1|HostGroup2").groupid -status 1 -DNSName NewHost.example.com -MonitorByDNSName
+		Create new host with FQDN and set monitoring according DNS and not IP
+	.Example
+		Import-Csv c:\new-servers.csv | %{New-ZabbixHost -HostName $_.$Hostname -IP $_.IP -TemplateID "10081","10166" -GroupID 8,14}
 		Mass create new hosts
 	.Example
 		Import-Csv c:\new-servers.csv | %{New-ZabbixHost -HostName $_.Hostname -IP $_.IP -GroupID $_.GroupID -TemplateID $_.TemplateID -status $_.status}
 		Mass create new hosts
 	.Example
-		Get-ZabbixHost | ? name -match SourceHost | New-ZabbixHost -HostName NewHost -IP 10.20.10.10 -TemplateID (Get-ZabbixHost | ? name -match "SourceHost").parentTemplates.templateid
-		Clone host with single interface
+		New-ZabbixHost -HostName NewHost -IP 10.20.10.10 -GroupID (Get-ZabbixHost | ? name -eq "SourceHost").groups.groupid -TemplateID (Get-ZabbixHost | ? name -eq "SourceHost" | Get-ZabbixTemplate | ? name -match os).templateid -status 1 -verbose 
+		Clone HostGroups and Templates from other host
 	.Example
-		(1..9) | %{Get-ZabbixHost | ? name -match sourcehost | New-ZabbixHost -HostName NewHost0$_ -IP 10.20.10.1$_ -GroupID 8 -TemplateID "10081","10166" -status 1 -verbose}
-		Clone 1 host to multiple new with single interface
-	.Example
-		Import-Csv c:\clone-servers.csv | %{Get-ZabbixHost | ? name -match SourceHost | New-ZabbixHost -HostName $_.Hostname -IP $_.IP -TemplateID (Get-ZabbixHost | ? name -match "SourceHost").parentTemplates.templateid -status 1}
-		Mass clone from master template 
-	.Example 
-		Get-ZabbixHost | ? name -match SourceHost | New-ZabbixHost -HostName NewHost -IP 10.20.10.10 -TemplateID (Get-ZabbixHost | ? name -match "SourceHost").parentTemplates.templateid -status 1
-		Clone host with linked templates, while new host will be disabled
-	.Example
-		Get-ZabbixHost | ? name -match SourceHost | New-ZabbixHost -HostName NewHostName -IP 10.20.10.10 -TemplateID (Get-ZabbixHost | ? name -match "SourceHost").parentTemplates.templateid -Interfaces (Get-ZabbixHostInterface -HostID (Get-ZabbixHost -HostName SourceHost).hostid) -status 1
-		Get-ZabbixHost | ? name -match NewHost | Get-ZabbixHostInterface | %{Set-ZabbixHostInterface -IP 10.20.10.10 -InterfaceID $_.interfaceid -Port $_.port -HostID $_.hostid}
-		Get-ZabbixHost | ? name -match NewHost | %{$n=$_.name; Get-ZabbixHostInterface -HostID $_.hostid} | ft -a @{n="name";e={$n}},hostid,interfaceid,ip,port
-		Clone the host with multiple interfaces, then update interfaces with new IP, then check the interfaces
-	.Example
-		Clone:
-		Get-ZabbixHost | ? name -match SourceHost | New-ZabbixHost -HostName NewHostname -IP 10.20.10.10 -TemplateID (Get-ZabbixHost | ? name -match "SourceHost").parentTemplates.templateid -verbose -interfaces (Get-ZabbixHostInterface -HostID (Get-ZabbixHost -HostName SourceHost).hostid) -status 1
-		Replace IP for each interface:
-		Get-ZabbixHost | ? name -match SourceHost | Get-ZabbixHostInterface | %{Set-ZabbixHostInterface -InterfaceID $_.interfaceid -IP 10.20.10.10 -Port $_.port -HostID $_.hostid -main $_.main}
-		Check Interfaces:
-		Get-ZabbixHost | ? name -match NewHostName | Get-ZabbixHostInterface | ft -a
-		Remove one of the templates, which will be readded:
-		Get-ZabbixHost | ? name -match NewHostName | select hostid,host,status -ExpandProperty parentTemplates | ? name -match someTemplateName | Set-ZabbixHost -removeTemplates -Verbose
-		Enable new host:
-		Get-ZabbixHost | ? name -match NewHostName | Set-ZabbixHost -status 0
-		Check new host:
-		Get-ZabbixHost | ? name -match NewHostName | select name,*error*
-		Get-ZabbixHost | ? name -match NewHostName | select name,*jmx*
-		Get-ZabbixItem -HostId (Get-ZabbixHost | ? name -match NewHostName).hostid | ? key_ -match "Version|ProductName|HeapMemoryUsage.used" | ? key_ -notmatch "vmver" | select @{n="lastclock";e={(convertfrom-epoch $_.lastclock).addhours(+1)}},@{n="host";e={$_.hosts.name}},@{n="Application";e={$_.applications.name}},lastvalue,key_ | sort host,application,key_ | ft -a
-		Mark one of default interfaces non default:
-		Get-ZabbixHost | ? name -match NewHostName | Get-ZabbixHostInterface | ? port -match 31051 | Set-ZabbixHostInterface -main 0
-		Mark interface default for the template which will be manually readded:
-		Get-ZabbixHost | ? name -match NewHostName | Get-ZabbixHostInterface | ? port -match 31021 | Set-ZabbixHostInterface -main 1
-		Manually readd removed template 
-		Check whether template works:
-		Get-ZabbixItem -HostId (Get-ZabbixHost | ? name -match NewHostName).hostid | ? key_ -match "Version|ProductName|HeapMemoryUsage.used" | ? key_ -notmatch "vmver" | select @{n="lastclock";e={(convertfrom-epoch $_.lastclock).addhours(+1)}},@{n="host";e={$_.hosts.name}},@{n="Application";e={$_.applications.name}},lastvalue,key_ | sort host,application,key_ | ft -a
-
-		Clone host with multiple JMX interfaces, step by step. May not be comatible with your environment. This also needed for pre Zabbix version 3.0.
-		From version 3.0 multiple JMX interfaces per host were introduced. 
-		In this scenario we clone host with multiple JMX interfaces. To each JMX interface will be linked specific to this interface JMX template.
-		It can be done only if we will link JMX template to the interface, marked default (-main 1)   
+		Get-ZabbixHost | ? name -eq SourceHost | Get-ZabbixApplication | New-ZabbixApplication -HostID (Get-ZabbixHost | ? name -match newHost).hostid
+		Clone Application(s) from host to host
 	#>
 	
 	[CmdletBinding()]
@@ -690,13 +679,12 @@ Function New-ZabbixHost {
 		[Switch]$MonitorByDNSName,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Port = 10050,
 		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$status,
-        [Parameter(Mandatory=$False)][string]$GroupID,
-		# [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$GroupID,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$Groups,
+		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][array]$GroupID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$groups,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][string]$ProxyHostID=0,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$Templates,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][array]$Interfaces,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][int]$ProxyHostID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$templates,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][array]$interfaces,
 		# [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$Interfaces,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session=($global:zabSessionParams.session),
@@ -717,112 +705,44 @@ Function New-ZabbixHost {
 			$True {$ByDNSName = 0} # = ByDomainName
 		}
 		
-		# if ($TemplateID.count -gt 10) {write-host "`nOnly up to 10 templates are allowed. Exiting..." -f red -b yellow; return}
-		for ($i=0; $i -lt $TemplateID.length; $i++) {[array]$tmpl+=$(@{templateid = $($templateid[$i])})}
+		for ($i=0; $i -lt $TemplateID.length; $i++) {[array]$tmpl+=$(@{templateid = $($TemplateID[$i])})}
+		for ($i=0; $i -lt $GroupID.length; $i++) {[array]$grp+=$(@{groupid = $($GroupID[$i])})}
 		
-		if ($psboundparameters.GroupID) {
-			$Body = @{
-				method = "host.create"
-				params = @{
-					host = $HostName
-					interfaces = @{
-						type = 1
-						main = 1
-						useip = $ByDNSName
-						ip = $IP
-						dns = $DNSName
-						port = $Port
-					}
-					groups = @{
-						groupid = $GroupID
-					}
-					# groups = $groups
-					status = $Status
-					proxy_hostid = $ProxyHostID
-					templates = @($tmpl)
-					# templates = @(
-					# 	@{templateid = $TemplateID[0]}
-					# 	@{templateid = $TemplateID[1]}
-					# 	@{templateid = $TemplateID[2]}
-					# 	@{templateid = $TemplateID[3]}
-					# 	@{templateid = $TemplateID[4]}
-					# 	@{templateid = $TemplateID[5]}
-					# 	@{templateid = $TemplateID[6]}
-					# 	@{templateid = $TemplateID[7]}
-					# 	@{templateid = $TemplateID[8]}
-					# 	@{templateid = $TemplateID[9]}
-					# )
+		$Body = @{
+			method = "host.create"
+			params = @{
+				host = $HostName
+				interfaces = @{
+					type = 1
+					main = 1
+					useip = $ByDNSName
+					ip = $IP
+					dns = $DNSName
+					port = $Port
 				}
-				
-				jsonrpc = $jsonrpc
-				auth = $session
-				id = $id
+				status = $Status
+				proxy_hostid = $ProxyHostID
 			}
+			
+			jsonrpc = $jsonrpc
+			auth = $session
+			id = $id
 		}
-		elseif ($psboundparameters.interfaces) {
-			$Body = @{
-				method = "host.create"
-				params = @{
-					host = $HostName
-					interfaces = $Interfaces
-					groups = $Groups
-					status = $Status
-					templates = @($tmpl)
-					# templates = @(
-					# 	@{templateid = $TemplateID[0]}
-					# 	@{templateid = $TemplateID[1]}
-					# 	@{templateid = $TemplateID[2]}
-					# 	@{templateid = $TemplateID[3]}
-					# 	@{templateid = $TemplateID[4]}
-					# 	@{templateid = $TemplateID[5]}
-					# 	@{templateid = $TemplateID[6]}
-					# 	@{templateid = $TemplateID[7]}
-					# 	@{templateid = $TemplateID[8]}
-					# 	@{templateid = $TemplateID[9]}
-					# )
-				}
-				
-				jsonrpc = $jsonrpc
-				auth = $session
-				id = $id
-			}
-		}
-		else {
-			$Body = @{
-				method = "host.create"
-				params = @{
-					host = $HostName
-					interfaces = @{
-						type = 1
-						main = 1
-						useip = $ByDNSName
-						ip = $IP
-						dns = $DNSName
-						port = $Port
-					}
-					groups = $groups
-					status = $Status
-					# interfaces = $interfaces
-					templates = @($tmpl)
-					# templates = @(
-					# 	@{templateid = $TemplateID[0]}
-					# 	@{templateid = $TemplateID[1]}
-					# 	@{templateid = $TemplateID[2]}
-					# 	@{templateid = $TemplateID[3]}
-					# 	@{templateid = $TemplateID[4]}
-					# )
-				}
-				
-				jsonrpc = $jsonrpc
-				auth = $session
-				id = $id
-			}
-		}
+
+		if ($GroupID) {$Body.params.groups=$grp}
+		if ($TemplateID) {$Body.params.templates=$tmpl}
+
 		$BodyJSON = ConvertTo-Json $Body -Depth 3
 		write-verbose $BodyJSON
 		
 		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-		if ($a.result) {$a.result} else {$a.error}
+		if ($a.result) {
+			$a.result
+			if ($psboundparameters.interfaces) {
+				write-host "Replacing the IP address in cloned interfaces..." -f green
+				Get-ZabbixHost -HostName $HostName | Get-ZabbixHostInterface | %{Set-ZabbixHostInterface -InterfaceID $_.interfaceid -IP $IP -Port $_.port -HostID $_.hostid -main $_.main}
+			}
+		} else {$a.error}
 	}
 }
 
@@ -899,6 +819,97 @@ Function Remove-ZabbixHost {
 	}
  }
 
+ Function Copy-ZabbixHost {
+	<# 
+	.Synopsis
+		Create new host to monitor from zabbix server
+	.Description
+		Create new host to monitor from zabbix server
+	.Parameter HostName
+		HostName of the host as it will display on zabbix
+	.Parameter IP
+		IP adress to supervise the host
+	.Parameter DNSName
+		Domain name to supervise the host
+	.Parameter Port
+		Port to supervise the host
+	.Parameter GroupID
+		ID of the group where add the host
+	.Parameter TemplateID
+		ID/IDs of the templates to add to the host
+	.Parameter MonitorByDNSName
+		If used, domain name of the host will used to contact it
+	.Example
+		Get-ZabbixHost | ? name -eq SourceHost | Copy-ZabbixHost -HostName NewHost -IP 10.20.10.10
+		Full clone of host with new Hostanme and IP
+	.Example
+		Get-ZabbixHost | ? name -eq SourceHost | Copy-ZabbixHost -HostName NewHost -IP 10.20.10.10 -status 1
+		Full clone of host with new Hostanme and IP with status 1 (disabled)
+	.Example
+		Import-Csv c:\new-servers.csv | %{Get-ZabbixHost | ? name -eq SourceHost | Clone-ZabbixHost -HostName $_.Hostname -IP $_.IP}
+		Mass clone new hosts
+	#>
+	
+	[CmdletBinding()]
+	[Alias("Clone-ZabbixHost","czhst")]
+	Param (
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$false)][string]$HostName,
+		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$HostID,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][array]$TemplateID,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][string]$IP,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Port = 10050,
+		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$interfaces,
+		[Alias("parentTemplates")][Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$templates,
+		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$status,
+		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$groups,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][string]$GroupID,
+        [Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$httpTests,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][int]$ProxyHostID,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session=($global:zabSessionParams.session),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id=($global:zabSessionParams.id),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL=($global:zabSessionParams.url)
+    )
+
+	process {
+
+		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(get-zabbixsession)) {return}
+
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		$Body = @{
+			method = "host.create"
+			params = @{
+				host = $HostName
+				# interfaces = $interfaces
+				interfaces = (Get-ZabbixHostInterface -HostID $hostid)
+				templates = ($templates | select templateid)
+				groups = ($groups | select groupid)
+				proxy_hostid = $ProxyHostID
+				httpTests = ($httpTests | select httptestid)
+				status = $Status
+			}
+			
+			jsonrpc = $jsonrpc
+			auth = $session
+			id = $id
+		}
+
+		$BodyJSON = ConvertTo-Json $Body -Depth 3
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		#$a.result.hostids
+		if ($a.result) {
+			$a.result
+				write-verbose " --> Going to replace the IP address in cloned interfaces..."
+				Get-ZabbixHost -HostName $HostName | Get-ZabbixHostInterface | %{Set-ZabbixHostInterface -InterfaceID $_.interfaceid -IP $IP -Port $_.port -HostID $_.hostid -main $_.main}
+		} else {$a.error}
+	}
+}
+
 Function Get-ZabbixTemplate {
 	<# 
 	.Synopsis
@@ -962,6 +973,8 @@ Function Get-ZabbixTemplate {
 			params = @{
 				output = "extend"
 				selectHosts = "extend"
+				selectTemplates = "extend"
+				selectParentTemplates = "extend"
 				selectGroups = "extend"
 				selectHttpTests = "extend"
 				selectItems = "extend"
@@ -992,32 +1005,50 @@ Function Get-ZabbixTemplate {
 	}
 }
 
-# 	Start new additions
-#   New addtion -->  Check!!!
 Function New-ZabbixTemplate {
 	<# 
 	.Synopsis
 		Create templates on zabbix server
 	.Description
-		Create templates on zabbix server
+	Create templates on zabbix server
+	.Parameter TemplateHostName
+		(Required) Template hostname: Technical name of the template
+	.Parameter TemplateName
+		Template name: Visible name of the host, Default: host property value
+	.Parameter Description
+		Description of the template
+	.Parameter groups
+		(Required) Host groups to add the template to, Default: HostGroup=1 (Templates)
+	.Parameter templates
+		Templates to be linked to the template
+	.Parameter hosts
+		Hosts to link the template to
 	.Example
-		New-ZabbixTemplate -TemplateName "newTemplateName" -groups ((Get-ZabbixHostGroup | ? name -match hostGroup).groupid) -hosts (Get-ZabbixHost | ? name -match hostName).hostid
+		New-ZabbixTemplate -TemplateHostName "newTemplateName" -groups ((Get-ZabbixHostGroup | ? name -match hostGroup).groupid) -hosts (Get-ZabbixHost | ? name -match hostName).hostid -templates (Get-ZabbixTemplate | ? name -eq "TemplateName" ).templateid
 		Create new template 
 	.Example
-		New-ZabbixTemplate -TemplateName "newTemplateName"
+		New-ZabbixTemplate -TemplateHostName newTemplateName -groups ((Get-ZabbixHostGroup | ? name -match hostGroup).groupid) -hosts (Get-ZabbixHost | ? name -match host).hostid -templates (Get-ZabbixTemplate | ? name -match "ICMP" ).templateid  -AddDefaultTemplateGroup
+		Create new template and additionally to default Template grouo (1) 
+	.Example
+		New-ZabbixTemplate -TemplateHostName "newTemplateName"
 		Create new template
 	#>
     
 	[CmdletBinding()]
 	[Alias("nzt")]
 	Param (
-		[Parameter(Mandatory=$True)][string]$TemplateName,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$hosts,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$groups,
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session=($global:zabSessionParams.session),
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id=($global:zabSessionParams.id),
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL=($global:zabSessionParams.url)
+		[Parameter(Mandatory=$True)][string]$TemplateHostName,
+		[Parameter(Mandatory=$False)][string]$TemplateName,
+		[Parameter(Mandatory=$False)][string]$TemplateDescription,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$groups,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$templates,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$hosts,
+		# [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$macros,
+		[switch]$AddDefaultTemplateGroup,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$session=($global:zabSessionParams.session),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$id=($global:zabSessionParams.id),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$URL=($global:zabSessionParams.url)
     )
 	
 	process {
@@ -1030,9 +1061,15 @@ Function New-ZabbixTemplate {
 		
 		write-verbose ("groups: " + $groups.length)
 		write-verbose ("hosts:  " + $hosts.length)
+		write-verbose ("templates:  " + $templates.length)
 
-		for ($i=0; $i -lt $groups.length; $i++) {[array]$gr+=$(@{groupid = $($groups[$i])})}
+		if (!$groups) {$groups=1} 
+		if ($AddDefaultTemplateGroup) {$groups+=1}
+
+		for ($i=0; $i -lt $groups.length; $i++) {[array]$grp+=$(@{groupid = $($groups[$i])})}
 		for ($i=0; $i -lt $hosts.length; $i++) {[array]$hst+=$(@{hostid = $($hosts[$i])})}
+		for ($i=0; $i -lt $templates.length; $i++) {[array]$tmpl+=$(@{templateid = $($templates[$i])})}
+		# for ($i=0; $i -lt $macros.length; $i++) {[array]$mcr+=$(@{macroid = $($macros[$i])})}
 		
 		# $gr
 		# $hst
@@ -1040,15 +1077,19 @@ Function New-ZabbixTemplate {
 		$Body = @{
 			method = "template.create"
 			params = @{
-				host = $TemplateName
-				groups = @($gr)
-				hosts = @($hst)
+				host = $TemplateHostName
+				name = $TemplateName
+				description = $TemplateDescription
+				groups = @($grp)
 			}
 
 			jsonrpc = $jsonrpc
 			id = $id
 			auth = $session
 		}
+
+		if ($hosts) {$Body.params.hosts=@($hst)}
+		if ($templates) {$Body.params.templates=@($tmpl)}
 
 		$BodyJSON = ConvertTo-Json $Body -Depth 3
 		write-verbose $BodyJSON
@@ -1066,27 +1107,39 @@ Function Set-ZabbixTemplate {
 	.Description
 		Set templates from zabbix server
 	.Example
-		Get-ZabbixTemplate
-		Get all templates 
-	.Example
 		Get-ZabbixTemplate | ? name -match oldTemplateName | select templateid,name | Set-ZabbixTemplate -TemplateName "newTemplateName"
 		Rename template
 	.Example
-		Get-ZabbixTemplate -TemplateName newTemplateName -TemplateID 10404
+		Set-ZabbixTemplate -TemplateVisibleName newTemplateName -TemplateID 10404
 		Rename template
+	.Example
+		Get-ZabbixTemplate | ? name -eq templateName | Set-ZabbixTemplate -TemplateVisibleName VisibleTemplateName -groups 24,25 -hosts (Get-ZabbixHost | ? name -match host).hostid  -Verbose -templates (Get-ZabbixTemplate | ? name -eq "Template App HTTP Service" ).templateid
+		Replace  values in the template
+	.Example
+		$addTempID=(Get-ZabbixTemplate | ? host -eq currentTemplate).parenttemplates.templateid
+		$addTempID+=((Get-ZabbixTemplate | ? name -match FTP).templateid)
+		$addGrpID=(Get-ZabbixTemplate | ? host -eq currentTemplate).groups.groupid
+		$addGrpID+=(Get-ZabbixHostGroup | ? name -match hostGroup).groupid
+		Get-ZabbixTemplate | ? name -eq currentTemplat | Set-ZabbixTemplate -GroupsID $addTempID -TemplatesID $addGrpID -verbose -TemplateDescription "TemplateDescription"
+		This will add additional values to already existing ones, i.e add, and not replace
 	#>
     
 	[CmdletBinding()]
 	[Alias("szt")]
 	Param (
-        [Alias("Name")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$TemplateName,
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$TemplateID,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$HostID,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$hosts,
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session=($global:zabSessionParams.session),
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id=($global:zabSessionParams.id),
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL=($global:zabSessionParams.url)
+		[Alias("Name")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName)][string]$TemplateVisibleName,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName)][string]$TemplateDescription,
+		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$TemplateID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][array]$GroupsID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][array]$TemplatesID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][array]$HostsID,
+		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$groups,
+		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$templates,
+		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$hosts,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$session=($global:zabSessionParams.session),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$id=($global:zabSessionParams.id),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$URL=($global:zabSessionParams.url)
     )
     
 	process {
@@ -1097,12 +1150,21 @@ Function Set-ZabbixTemplate {
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
 		
+		write-verbose ("groups: " + $groups.length)
+		write-verbose ("hosts:  " + $hosts.length)
+		write-verbose ("templates:  " + $templates.length)
+
+		for ($i=0; $i -lt $groupsID.length; $i++) {[array]$grp+=$(@{groupid = $($groupsID[$i])})}
+		for ($i=0; $i -lt $hostsID.length; $i++) {[array]$hst+=$(@{hostid = $($hostsID[$i])})}
+		for ($i=0; $i -lt $templatesID.length; $i++) {[array]$tmpl+=$(@{templateid = $($templatesID[$i])})}
+
 		$Body = @{
 			method = "template.update"
 			params = @{
 				
 				templateid = $TemplateID
-				name = $TemplateName
+				name = $TemplateVisibleName
+				description = $TemplateDescription
 			}
 
 			jsonrpc = $jsonrpc
@@ -1110,15 +1172,17 @@ Function Set-ZabbixTemplate {
 			auth = $session
 		}
 
-		$BodyJSON = ConvertTo-Json $Body
+		if ($groupsID) {$Body.params.groups=@($grp)} else {if ($groups) {$Body.params.groups=$groups}}
+		if ($hostsID) {$Body.params.hosts=@($hst)} else {if ($hosts) {$Body.params.hosts=$hosts}}
+		if ($templatesID) {$Body.params.templates=@($tmpl)} else {if ($templates) {$Body.params.templates=$templates} }
+
+		$BodyJSON = ConvertTo-Json $Body -Depth 3
 		write-verbose $BodyJSON
 		
 		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
 		if ($a.result) {$a.result} else {$a.error}
 	}
 }
-# 	End new additions
-#   New addtion -->  Check!!!
 
 Function Remove-ZabbixTemplate {
 	<# 
@@ -1197,8 +1261,10 @@ Function Get-ZabbixHostGroup {
 		(Get-ZabbixHoustGroup | ? name -match somegroup).hosts
 		Get host group and hosts (case insensitive)
 	.Example
-		Get-ZabbixHostGroup | ? name -match somegroup | select name -ExpandProperty hosts | ft -a
+		Get-ZabbixHostGroup | ? name -match somegroup | select name -ExpandProperty hosts | sort host | ft -a
 		Get host group and it's hosts
+	.Example
+
 	.Example
 		Get-ZabbixHostGroup -GroupID 10001
 		Get group
@@ -1217,7 +1283,7 @@ Function Get-ZabbixHostGroup {
 
 	process {
 
-		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(get-zabbixsession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
@@ -1725,10 +1791,10 @@ Function New-ZabbixMaintenance {
 		Maintenance maintenance type (0 - (default) with data collection;  1 - without data collection)
 	.Parameter TimeperiodType
 		Maintenance TimeperiodType (0 - (default) one time only; 2 - daily;  3 - weekly;  4 - monthly)
-	.Parameter TimeperiodStartTime
-		Maintenance timeperiod's start time (epoch time format)
+	.Parameter TimeperiodStartDate
+		Maintenance timeperiod's start date. Required only for one time periods. Default: current date (epoch time format)
 	.Parameter TimeperiodPeriod
-		Maintenance timeperiod's period/duration (epoch time format)	
+		Maintenance timeperiod's period/duration (seconds)	
 	.Example
 		New-ZabbixMaintenance -HostID (Get-ZabbixHost | ? name -match "hosts").hostid -MaintenanceName "NewMaintenance" -ActiveSince (convertTo-epoch ((get-date).addhours(0)).ToUniversalTime()) -ActiveTill (convertTo-epoch ((get-date).addhours(7)).ToUniversalTime()) -TimeperiodPeriod (4*3600)
 		Create new maintenance for few hosts (time will be according Zabbix server time). Maintenance will be active for 7 hours from now, with Period 4 hours, which will start immediately 
@@ -1741,35 +1807,46 @@ Function New-ZabbixMaintenance {
 	.Example
 		$hosts=Get-Zabbixhost | ? name -match "host|anotherhost"
 		$groups=(Get-ZabbixGroup | ? name -match "group")
-		New-ZabbixMaintenance -HostID $hosts.hostid -GroupID $groups.groupid -MaintenanceName "NewMaintenanaceName" -ActiveSince (convertTo-epoch (convertTo-epoch ((get-date).addhours(0)).ToUniversalTime()) -ActiveTill (convertTo-epoch ((get-date).addhours(+4)).ToUniversalTime()) -TimeperiodPeriod (3*3600)
+		New-ZabbixMaintenance -HostID $hosts.hostid -GroupID $groups.groupid -MaintenanceName "NewMaintenanceName" -ActiveSince (convertTo-epoch (convertTo-epoch ((get-date).addhours(0)).ToUniversalTime()) -ActiveTill (convertTo-epoch ((get-date).addhours(+4)).ToUniversalTime()) -TimeperiodPeriod (3*3600)
 		Create new maintenance for few hosts (time will be according current Zabbix server time). Maintenanace Active from now for 4 hours, and Period with duration of 3 hours, sarting immediately
 	#>
 
 	[CmdletBinding()]
 	[Alias("nzm")]
 	Param (
-        [Parameter(Mandatory=$True)][string]$MaintenanceName,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][array]$GroupID,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][array]$HostID,
-		$MaintenanceDescription,
-		#Type of maintenance.  Possible values:  0 - (default) with data collection;  1 - without data collection. 
-		$MaintenanceType,
-		#epoch time
-		[Parameter(Mandatory=$True)]$ActiveSince,
-		#epoch time
-		[Parameter(Mandatory=$True)]$ActiveTill,
-		#Possible values: 0 - (default) one time only;  2 - daily;  3 - weekly;  4 - monthly. 
-		$TimePeriodType=0,
-		#Time of day when the maintenance starts in seconds.  Required for daily, weekly and monthly periods. (epoch time)
-		$TimeperiodStartTime,
-		#Date when the maintenance period must come into effect.  Required only for one time periods. Default: current date. (epoch time)
-		$TimeperiodStartDate,
-		#For daily and weekly periods every defines day or week intervals at which the maintenance must come into effect. 
-		#For monthly periods every defines the week of the month when the maintenance must come into effect. 
-		#Possible values:  1 - first week;  2 - second week;  3 - third week;  4 - fourth week;  5 - last week.
-		$Every="",
-		#epoch time
-		[Parameter(Mandatory=$True)]$TimeperiodPeriod,
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$False)][string]$MaintenanceName,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][array]$GroupID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][array]$HostID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$MaintenanceDescription,
+		# Type of maintenance.  Possible values:  0 - (default) with data collection;  1 - without data collection. 
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][int]$MaintenanceType,
+		# epoch time
+		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$False)]$ActiveSince,
+		# epoch time
+		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$False)]$ActiveTill,
+		# Possible values: 0 - (default) one time only;  2 - daily;  3 - weekly;  4 - monthly. 
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][int]$TimePeriodType=0,
+		# Time of day when the maintenance starts in seconds.  Required for daily, weekly and monthly periods. (epoch time)
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][int]$TimeperiodStartTime,
+		# Date when the maintenance period must come into effect.  Required only for one time periods. Default: current date. (epoch time)
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)]$TimeperiodStartDate,
+		# Duration of the maintenance period in seconds. Default: 3600 (epoch time)
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][int]$TimeperiodPeriod,
+		# For daily and weekly periods every defines day or week intervals at which the maintenance must come into effect. 
+		# For monthly periods every defines the week of the month when the maintenance must come into effect. 
+		# Possible values:  1 - first week;  2 - second week;  3 - third week;  4 - fourth week;  5 - last week.
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][int]$TimeperiodEvery,
+		# Day of the month when the maintenance must come into effect
+		# Required only for monthly time periods
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][int]$TimeperiodDay,
+		# Days of the week when the maintenance must come into effect
+		# Days are stored in binary form with each bit representing the corresponding day. For example, 4 equals 100 in binary and means, that maintenance will be enabled on Wednesday
+		# Used for weekly and monthly time periods. Required only for weekly time periods
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][int]$TimeperiodDayOfWeek,
+		# Months when the maintenance must come into effect
+		# Months are stored in binary form with each bit representing the corresponding month. For example, 5 equals 101 in binary and means, that maintenance will be enabled in January and March
+		# Required only for monthly time periods
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][int]$TimeperiodMonth,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session=($global:zabSessionParams.session),
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id=($global:zabSessionParams.id),
@@ -1800,9 +1877,14 @@ Function New-ZabbixMaintenance {
 							timeperiod_type = $TimeperiodType
 							start_date = $TimeperiodStartDate
 							period = $TimeperiodPeriod
+							
+							start_time = $TimeperiodStartTime
+							month = $TimeperiodMonth
+							dayofweek = $TimeperiodDayOfWeek
+							day = $TimeperiodDay
 						}
 					)
-					groupids = @($groupid)
+					groupids = @($GroupID)
 				}
 				
 				jsonrpc = $jsonrpc
@@ -1823,17 +1905,167 @@ Function New-ZabbixMaintenance {
 						@{
 							timeperiod_type = $TimeperiodType
 							start_date = $TimeperiodStartDate
-							#start_time = $TimeperiodStartTime
 							period = $TimeperiodPeriod
+							
+							every = $TimeperiodEvery
+							start_time = $TimeperiodStartTime
+							month = $TimeperiodMonth
+							dayofweek = $TimeperiodDayOfWeek
+							day = $TimeperiodDay
 						}
 					)
-					hostids = @($hostid)
+					hostids = @($HostID)
 				}
 				
 				jsonrpc = $jsonrpc
 				id = $id
 				auth = $session
 			}
+		}
+		
+		$BodyJSON = ConvertTo-Json $Body -Depth 4
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
+	}
+ }
+
+ Function Set-ZabbixMaintenance {
+	<# 
+	.Synopsis
+		Set/update maintenance settings
+	.Description
+		Set/update maintenance settings
+	.Parameter MaintenanceName
+		Maintenance name (case sensitive)
+	.Parameter MaintenanceDescription
+		Maintenance Description
+	.Parameter ActiveSince
+		Maintenance start time (epoch time format)
+	.Parameter ActiveTill
+		Maintenance end time (epoch time format)
+	.Parameter MaintenanceType
+		Maintenance maintenance type (0 - (default) with data collection;  1 - without data collection)
+	.Parameter TimeperiodType
+		Maintenance TimeperiodType (0 - (default) one time only; 2 - daily;  3 - weekly;  4 - monthly)
+	.Parameter TimeperiodStartDate
+		Maintenance timeperiod's start date. Required only for one time periods. Default: current date (epoch time format)
+	.Parameter TimeperiodPeriod
+		Maintenance timeperiod's period/duration (seconds)	
+	.Example
+		Get-ZabbixMaintenance -MaintenanceName 'MaintenanceName' | Set-ZabbixMaintenance -GroupID (Get-ZabbixHostGroup | ? name -eq 'HostGroupName').groupid -TimeperiodPeriod 44400 -HostID (Get-ZabbixHost | ? name -match host).hostid
+		Will replace ZbbixHostGroup, hosts and set new duration for selected maintenance (MaintenanceName is case sensitive)
+	.Example
+		Get-ZabbixMaintenance | ? name -eq 'MaintenanceName' | Set-ZabbixMaintenance -GroupID (Get-ZabbixHostGroup | ? name -match 'homeGroup').groupid -verbose -TimeperiodPeriod 44400 -HostID (Get-ZabbixHost | ? name -match host).hostid
+		Same as above (MaintenanceName is case insensitive)
+	.Example
+		Get-ZabbixMaintenance | ? name -match 'maintenance' | Set-ZabbixMaintenance -GroupID (Get-ZabbixHostGroup | ? name -match 'Name1|Name2').groupid -TimeperiodPeriod 44400 -HostID (Get-ZabbixHost | ? name -match host).hostid
+		Replace ZbbixHostGroups, hosts, duration in multiple maintenances 
+	#>
+
+	[CmdletBinding()]
+	[Alias("szm")]
+	Param (
+		[Alias("name")][Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$MaintenanceName,
+		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$MaintenanceID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][array]$GroupID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][array]$HostID,
+		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$groups,
+		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$hosts,
+		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$timeperiods,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$MaintenanceDescription,
+		#Type of maintenance.  Possible values:  0 - (default) with data collection;  1 - without data collection. 
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$MaintenanceType,
+		#epoch time
+		[Alias("active_since")][Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)]$ActiveSince,
+		#epoch time
+		[Alias("active_till")][Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)]$ActiveTill,
+		#epoch time
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$TimeperiodPeriod,
+		#Possible values: 0 - (default) one time only;  2 - daily;  3 - weekly;  4 - monthly. 
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$TimePeriodType=0,
+		#Time of day when the maintenance starts in seconds.  Required for daily, weekly and monthly periods. (epoch time)
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$TimeperiodStartTime,
+		#Date when the maintenance period must come into effect.  Required only for one time periods. Default: current date. (epoch time)
+		# [Alias("timeperiods.start_date")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ValueFromRemainingArguments=$true)]$TimeperiodStartDate,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)]$TimeperiodStartDate,
+		#For daily and weekly periods every defines day or week intervals at which the maintenance must come into effect. 
+		#For monthly periods every defines the week of the month when the maintenance must come into effect. 
+		#Possible values:  1 - first week;  2 - second week;  3 - third week;  4 - fourth week;  5 - last week.
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$TimeperiodEvery,
+		# Day of the month when the maintenance must come into effect
+		# Required only for monthly time periods
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][int]$TimeperiodDay,
+		# Days of the week when the maintenance must come into effect
+		# Days are stored in binary form with each bit representing the corresponding day. For example, 4 equals 100 in binary and means, that maintenance will be enabled on Wednesday
+		# Used for weekly and monthly time periods. Required only for weekly time periods
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][int]$TimeperiodDayOfWeek,
+		# Months when the maintenance must come into effect
+		# Months are stored in binary form with each bit representing the corresponding month. For example, 5 equals 101 in binary and means, that maintenance will be enabled in January and March
+		# Required only for monthly time periods
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][int]$TimeperiodMonth,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$session=($global:zabSessionParams.session),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$id=($global:zabSessionParams.id),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$URL=($global:zabSessionParams.url)
+    )
+    
+	process {
+
+		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		# for ($i=0; $i -lt $GroupID.length; $i++) {[array]$grp+=$(@{GroupID = $($TemplateID[$i])})}
+		# for ($i=0; $i -lt $HostID.length; $i++) {[array]$hst+=$(@{HostID = $($HostID[$i])})}
+		# for ($i=0; $i -lt $TemplateID.length; $i++) {[array]$tmpl+=$(@{templateid = $($TemplateID[$i])})}
+		
+		if ($hosts -and !$HostID) {$HostID=($hosts).hostid}
+		if ($groups -and !$GroupID) {$GroupID=($groups).groupid}
+		if ($timeperiods -and !$TimeperiodType) {$TimeperiodType=($timeperiods).timeperiod_type}
+		if ($timeperiods -and !$TimeperiodStartDate) {$TimeperiodStartDate=($timeperiods).start_date}
+		if ($timeperiods -and !$TimeperiodStartTime) {$TimeperiodStartTime=($timeperiods).start_time}
+		if ($timeperiods -and !$TimeperiodPeriod) {$TimeperiodPeriod=($timeperiods).period}
+		if ($timeperiods -and !$TimeperiodMonth) {$TimeperiodMonth=($timeperiods).month}
+		if ($timeperiods -and !$TimeperiodDayOfWeek) {$TimeperiodDayOfWeek=($timeperiods).dayofweek}
+		if ($timeperiods -and !$TimeperiodDay) {$TimeperiodDay=($timeperiods).day}
+		if ($timeperiods -and !$TimeperiodEvery) {$TimeperiodEvery=($timeperiods).every}
+
+		$Body = @{
+			method = "maintenance.update"
+			params = @{
+				name = $MaintenanceName
+				maintenanceid = $MaintenanceID
+				description = $MaintenanceDescription
+				active_since = $ActiveSince
+				active_till = $ActiveTill
+				maintenance_type = $MaintenanceType
+				timeperiods = @(
+					@{
+						timeperiod_type = $TimeperiodType
+						start_date = $TimeperiodStartDate
+						period = $TimeperiodPeriod
+						
+						every = $TimeperiodEvery
+						start_time = $TimeperiodStartTime
+						month = $TimeperiodMonth
+						dayofweek = $TimeperiodDayOfWeek
+						day = $TimeperiodDay
+					}
+				)
+				groupids = $GroupID
+				# groups = $GroupID
+				hostids = $HostID
+				# timeperiods = $timeperiods
+				# timeperiods = @($timep)
+			}
+			
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
 		}
 		
 		$BodyJSON = ConvertTo-Json $Body -Depth 4
@@ -1878,6 +2110,9 @@ Function New-ZabbixMaintenance {
 		Get web/http tests by template name 
 	.Example 
 		Get-ZabbixHost | ? name -match host | Get-ZabbixHttpTest  | select name -ExpandProperty steps -ea 0 
+		Get web/http tests for hostname match
+	.Example
+		Get-ZabbixHost | ? name -match host  -pv hsts | Get-ZabbixHttpTest | select -ExpandProperty steps | select  @{n='Server';e={$hsts.host}},name,httpstepid,httptestid,no,url,timeout,required,status_codes,follow_redirects | ft -a
 		Get web/http tests for hostname match
 	.Example
 		Get-ZabbixHttpTest -HostID (Get-ZabbixHost | ? name -eq hostnname).hostid | ? name -match "httpTest" | fl httptestid,name,steps
@@ -2242,7 +2477,7 @@ Function Remove-ZabbixHttpTest {
 	}
 }
 
-Function Export-ZabbixConfig {
+Function Export-ZabbixConfiguration {
 	<# 
 	.Synopsis
 		Export configuration
@@ -2263,24 +2498,36 @@ Function Export-ZabbixConfig {
 		Export-ZabbixConfig -HostID (Get-ZabbixHost | ? name -match host).hostid | clip
 		Capture to clipboard exported hosts configurarion
 	.Example
-		Export-ZabbixConfig -HostID (Get-ZabbixHost | ? name -match host).hostid | sc c:\zabbix-hosts-export.xml -Encoding UTF8
+		Export-ZabbixConfig -HostID (Get-ZabbixHost | ? name -match host).hostid | Set-Content c:\zabbix-hosts-export.xml -Encoding UTF8 -nonewline
 		Export hosts configuration to xml file
 	.Example
-		Export-ZabbixConfig -TemplateID (Get-ZabbixTemplate | ? name -match TemplateName).templateid | sc c:\zabbix-templates-export.xml -Encoding UTF8
+		Export-ZabbixConfig -TemplateID (Get-ZabbixTemplate | ? name -match TemplateName).templateid | Set-Content c:\zabbix-templates-export.xml -Encoding UTF8 
 		Export template to xml file
 	.Example
-		Export-ZabbixConfig -TemplateID (Get-ZabbixHost | ? name -match windows).templateid | sc c:\zabbix-templates-export.xml -Encoding UTF8
-		Export template configuration linked to sertain hosts from Zabbix server to xml file.
+		Export-ZabbixConfig -TemplateID (Get-ZabbixHost | ? name -match windows).templateid | Set-Content c:\zabbix-templates-export.xml -Encoding UTF8 -nonewline
+		Export template configuration linked to sertain hosts to xml file, -nonewline saves file in Unix format (no CR)
+	.Example
+		Export-ZabbixConfig -HostID (Get-ZabbixHost | ? name -eq host).hostid | format-xml | Set-Content C:\zabbix-host-export-formatted-pretty.xml -Encoding UTF8
+		Export host template to xml, beautify with Format-Xml (module pscx) and save to xml file
+	.Example
+		Get-ZabbixHost | ? name -match host -pv hst | %{Export-ZabbixConfig -HostID $_.hostid | sc c:\ZabbixExport\export-zabbix-host-$($hst.name).xml -Encoding UTF8}
+		Export host configuration
+	.Example
+		Get-ZabbixHost | ? name -eq Host | Export-ZabbixConfig | Format-Xml | Set-Content C:\zabbix-host-exprt-formatted-pretty.xml -Encoding UTF8
+		Export host template to xml, beautify with Format-Xml (module pscx) and save to xml file
+	.Example
+		diff (Get-Content c:\FirstHost.xml) (Get-content c:\SecondHost.xml)
+		Compare hosts by comparing their configuration files
 	.Example
 		Get-ZabbixTemplate | ? name -match templateNames | Export-ZabbixConfig -Format json | sc C:\zabbix-templates-export.json
 		Export templates in JSON format
 	.Example
 		$expHosts=Get-ZabbixHost | ? name -match hosts | Export-ZabbixConfig -Format JSON | ConvertFrom-Json
-		$expHosts.zabbix_export
+		$expHosts.zabbix_export.hosts
 		Explore configuration as powershell objects, without retrieving information from the server
 	#>
 	[CmdletBinding()]
-	[Alias("ezconf")]
+	[Alias("Export-ZabbixConfig","ezconf")]
 	Param (
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$HostID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$GroupID,
@@ -2297,7 +2544,7 @@ Function Export-ZabbixConfig {
 	
 	process {
 
-		if (!$psboundparameters.count  -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
@@ -2411,6 +2658,124 @@ Function Export-ZabbixConfig {
 	}
 }
 
+function Import-ZabbixConfiguration {
+	<# 
+	.Synopsis
+		Import configuration
+	.Description
+		Import configuration
+	.Parameter GroupID
+		GroupID: groups - (array) IDs of host groups to Import.
+	.Parameter HostID
+		HostID - (array) IDs of hosts to Import
+	.Parameter TemplateID
+		TemplateID - (array) IDs of templates to Import.
+	.Parameter Format
+		Format: XML (default) or JSON. 
+	.Example
+		Import-ZabbixConfig -Path c:\zabbix-export-hosts.xml
+		Import hosts configuration
+	.Example
+		$inputFile = Get-Content c:\zabbix-export-hosts.xml | Out-String 
+		Import-ZabbixConfig -source $inputFile
+		Import hosts configuration
+	.Example
+		Get-ZabbixHost | ? name -match host -pv hst | %{Export-ZabbixConfig -HostID $_.hostid | sc c:\ZabbixExport\export-zabbix-host-$($hst.name).xml -Encoding UTF8}
+		dir c:\ZabbixExport\* | %{Import-ZabbixConfig $_.fullname}
+		Import hosts configuration
+	#>
+	[CmdletBinding()]
+	[Alias("Import-ZabbixConfig","izconf")]
+	Param (
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][string]$Path,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][string]$source,
+		# Format XML or JSON
+		[string]$Format="xml",
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session=($global:zabSessionParams.session),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id=($global:zabSessionParams.id),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL=($global:zabSessionParams.url)
+	)
+	
+	Process {
+		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"	
+		
+		if ($Path) {
+			if (Test-Path $Path) {$xmlFile = Get-Content $Path | out-string}
+			# if (Test-Path $Path) {$xmlFile = Get-Content $Path}
+			# if (Test-Path $Path) {[string]$xmlFile = Get-Content $Path}
+		}
+		elseif ($source) {$xmlFile = $source}
+		else {Write-Host "`nError: Wrong path!`n" -f red; return}
+		
+		if (($xmlFile).count -ne 1) {Write-Host "`nBad xml file!`n" -f red; return}
+		  
+		$Body = @{
+		method = "configuration.import"
+		params = @{
+			format = $format
+			rules = @{
+				groups = @{
+					createMissing = $true
+				}
+				templateLinkage = @{
+					createMissing = $true
+				}
+				applications = @{
+					createMissing = $true
+				}
+				hosts = @{
+					createMissing = $true
+					updateExisting = $true
+				}
+				items = @{
+					createMissing = $true
+					updateExisting = $true
+				}
+				discoveryRules = @{
+					createMissing = $true
+					updateExisting = $true
+				}
+				triggers = @{
+					createMissing = $true
+					updateExisting = $true
+				}
+				graphs = @{
+					createMissing = $true
+					updateExisting = $true
+				}
+				httptests = @{
+					createMissing = $true
+					updateExisting = $true
+				}
+				valueMaps = @{
+					createMissing = $true
+				}
+			}
+			source = $xmlFile
+		}
+		
+		jsonrpc = $jsonrpc
+		id = $id
+		auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body -Depth 3
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {
+			$a.result
+			Write-Host "`nImport was successful`n" -f green
+		} 
+		else {$a.error}
+	}
+}
+
 Function Get-ZabbixTrigger {
 	<# 
 	.Synopsis
@@ -2420,20 +2785,29 @@ Function Get-ZabbixTrigger {
 	.Parameter TriggerID
 		To filter by ID of the trigger
 	.Example
-        Get-ZabbixTrigger | ? status -eq 0 | ? expression -match fs.size | select status,description,expression | sort description
-        Get enabled triggers fs.size 
+        Get-ZabbixTrigger -HostID (Get-ZabbixHost | ? name -match host).hostid | select status,description,expression
+        Get triggers from host 
 	.Example
-		Get-ZabbixTemplate | ? name -match "TemplateName" | Get-ZabbixTrigger | select description,expression
+		Get-ZabbixTrigger -HostID (Get-ZabbixHost | ? name -match host).hostid | ? expression -match system | select triggerid,status,state,value,expression
+		Get triggers from host, matches "system" in expression line
+	.Example
+		Get-ZabbixTrigger -HostID (Get-ZabbixHost | ? name -match host).hostid | ? value -eq 1 | select @{n='lastchange(UTC)';e={convertFrom-epoch $_.lastchange}},triggerid,status,state,value,expression | ft -a
+		Get failed triggers from host: values: 0 is OK, 1 is problem
+	.Example
+		Get-ZabbixTemplate | ? name -match "TemplateName" | Get-ZabbixTrigger | select status,description,expression
+		Get triggers from template
+	.Example
+		Get-ZabbixTemplate | ? name -match "Template OS Linux" | Get-ZabbixTrigger | ? status -eq 0 | ? expression -match system | select status,description,expression
 		Get triggers from template
 	.Example
 		Get-ZabbixTrigger -TemplateID (Get-ZabbixTemplate | ? name -match Template).templateid -ExpandDescription -ExpandExpression | ft -a status,description,expression
 		Get triggers by templateid (-ExpandDescription and -ExpandExpression will show full text instead of ID only)
+	.Example 
+		Get-ZabbixTrigger -TemplateID (Get-ZabbixTemplate | ? name -eq "Template OS Linux").templateid | select status,description,expression
+		Get list of triggers from templates
 	.Example
 		Get-ZabbixTrigger -ExpandDescription -ExpandExpression | ? description -match "Template" | select description,expression
 		Get triggers where description match the string (-ExpandDescription and -ExpandExpression will show full text instead of ID only)
-    .Example 
-		Get-ZabbixTrigger -TemplateID (Get-ZabbixTemplate | ? name -match "Template").templateid | select description,expression
-		Get list of triggers from templates
 	.Example
 		Get-ZabbixHost -HostName HostName | Get-ZabbixTrigger -ea silent | ? status -match 0 | ft -a status,templateid,description,expression
 		Get triggers for host (status 0 == enabled, templateid 0 == assigned directly to host, not from template) 
@@ -2458,7 +2832,7 @@ Function Get-ZabbixTrigger {
 	
 	process {
 
-		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
@@ -2472,8 +2846,12 @@ Function Get-ZabbixTrigger {
 				selectLastEvent = "extend"
 				selectGroups = "extend"
 				selectHosts = "extend"
+				selectDependencies = "extend"
+				selectTags = "extend"
+				selectDiscoveryRule = "extend"
 				expandDescription = $ExpandDescription
 				expandExpression = $ExpandExpression
+				expandComment = $ExpandComment
 				triggerids = $TriggerID
 				templateids = $TemplateID
 				hostids = $HostID
@@ -2522,8 +2900,8 @@ Function Set-ZabbixTrigger {
 	[CmdletBinding()]
 	[Alias("sztr")]
 	Param (
-        [Parameter(ValueFromPipelineByPropertyName=$true)]$TriggerID,
-		[Parameter(ValueFromPipelineByPropertyName=$true)]$status,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)]$TriggerID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)]$status,
 		[switch]$ExpandDescription,
 		[switch]$ExpandExpression,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
@@ -2546,6 +2924,81 @@ Function Set-ZabbixTrigger {
 			params = @{
 				triggerid = $TriggerID
 				status = $status
+			}
+			
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+		
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
+	}
+}
+
+Function New-ZabbixTrigger {
+	<# 
+	.Synopsis
+		Create new trigger settings
+	.Description
+		Create new trigger settings
+	.Parameter TriggerID
+		TriggerID
+	.Example
+		Get-ZabbixHost -HostName HostName | Get-ZabbixTrigger -ea silent | ? status -match 0 | ? expression -match "V:,pfree" | Set-ZabbixTrigger -status 1 -Verbose
+        Disable trigger
+	.Example
+		Get-ZabbixTrigger -TemplateID (Get-zabbixTemplate | ? name -match "Template Name").templateid | ? description -match "trigger description" | Set-ZabbixTrigger -status 1
+		Disable trigger
+	.Example
+		Get-ZabbixHost | ? name -match server0[1-5,7] | Get-ZabbixTrigger -ea silent | ? status -match 0 | ? expression -match "uptime" | select triggerid,expression,status | Set-ZabbixTrigger -status 1
+		Disable trigger on multiple hosts
+	.Example
+		Get-ZabbixTemplate | ? name -match "Template" | Get-ZabbixTrigger | ? description -match triggerDescription | Set-ZabbixTrigger -status 0
+		Enable trigger
+	#>
+
+	[CmdletBinding()]
+	[Alias("nztr")]
+	Param (
+        # [Parameter(ValueFromPipelineByPropertyName=$true)]$TriggerID,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)]$TriggerDescription,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)]$TriggerExpression,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)]$status,
+		# [switch]$ExpandDescription,
+		# [switch]$ExpandExpression,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$triggertags,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$dependencies,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session=($global:zabSessionParams.session),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id=($global:zabSessionParams.id),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL=($global:zabSessionParams.url)
+    )
+	
+	process {
+		
+		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		write-verbose ("dependencies: " + $dependencies.length)
+
+		for ($i=0; $i -lt $dependencies.length; $i++) {[array]$depnds+=$(@{triggerid = $($dependencies[$i])})}
+
+		$Body = @{
+			method = "trigger.create"
+			params = @{
+				description = $TriggerDescription
+				expression = $TriggerExpression
+				# triggerid = $TriggerID
+				status = $status
+				dependencies = @($depnds)
 			}
 			
 			jsonrpc = $jsonrpc
@@ -3448,10 +3901,10 @@ Function Set-ZabbixUser {
 	.Parameter UserID
 		UserID
 	.Example
-		Get-ZabbixUser | ? alias -eq "alias" | Set-ZabbixUser -Name NewName -Surname NewSurname -rows_per_page 100
+		Get-ZabbixUser | ? alias -eq "alias" | Set-ZabbixUser -Name NewName -Surname NewSurname -rows_per_page 100 -usrgrpid 8 -theme dark-theme
 		Set user's properties
 	.Example
-		Get-ZabbixUser | ? alias -match "alias" | Set-ZabbixUser -Name NewName -Surname NewSurname -rows_per_page 100
+		Get-ZabbixUser | ? alias -match "alias" | Set-ZabbixUser -Name NewName -Surname NewSurname -rows_per_page 100 -usrgrpid 8 -theme dark-theme
 		Same as above for multiple users
 	.Example
 		Get-Zabbixuser | ? alias -match "alias" | Set-ZabbixUser -usrgrps (Get-ZabbixUserGroup | ? name -match disable).usrgrpid
@@ -3464,24 +3917,32 @@ Function Set-ZabbixUser {
 	[cmdletbinding()]
 	[Alias("szu")]
 	Param (
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$UserID,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][array]$usrgrpid,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Alias,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Passwd,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$sendto,
+		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)][string]$UserID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$usrgrpid,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Alias,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Passwd,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$sendto,
 		#user types: 1:Zabbix User,2:Zabbix Admin,3:Zabbix Super Admin 
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$type,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$usrgrps,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$medias,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$rows_per_page,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$UserMediaActive=1,
-		#[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$medias,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Name,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Surname,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session=($global:zabSessionParams.session),
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id=($global:zabSessionParams.id),
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL=($global:zabSessionParams.url)
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$type,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$usrgrps,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$medias,
+		[Alias("user_media")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$Media,
+		# Amount of object rows to show per page. Default: 50.
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$rows_per_page,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$UserMediaActive=1,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Name,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Surname,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$autologin,
+		# User's theme. Possible values: default - (default) system default; blue-theme - Blue; dark-theme - Dark.
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][ValidateSet("default", "blue-theme", "dark-theme")][string]$theme,
+		# Automatic refresh period. Accepts seconds and time unit with suffix. Default: 30s.
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$refresh,
+		# Language code of the user's language. Default: en_GB.
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$lang,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$session=($global:zabSessionParams.session),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$id=($global:zabSessionParams.id),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$URL=($global:zabSessionParams.url)
 	)
 	
 	process {
@@ -3492,6 +3953,10 @@ Function Set-ZabbixUser {
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
 
+		if (!$usrgrpid) {$usrgrpid=$usrgrps.usrgrpid}
+		# if ($usrgrpid) {$usrgrpid+=$usrgrps.usrgrpid}
+		for ($i=0; $i -lt $usrgrpid.length; $i++) {[array]$usrgrp+=$(@{usrgrpid = $($usrgrpid[$i])})}
+
 		$Body = @{
 			method = "user.update"
 			params = @{
@@ -3500,9 +3965,22 @@ Function Set-ZabbixUser {
 				surname = $Surname
 				alias = $Alias
 				passwd = $Passwd
-				usrgrps = $usrgrps
+				type = $type
+				autologin = $autologin
+				theme = $theme
+				refresh = $refresh
+				lang = $lang
 				rows_per_page = $Rows_Per_Page
-				medias = $medias
+				usrgrps = @($usrgrp)
+				user_medias = @(
+					@{
+					mediatypeid = $medias.mediatypeid
+					sendto = $medias.sendto
+					active = $medias.active
+					severity = $medias.severity
+					period = $medias.period
+					}
+				)
 			}
 			
 			jsonrpc = $jsonrpc
@@ -3696,6 +4174,9 @@ Function Get-ZabbixApplication {
 	.Example
 		Get-ZabbixGroup -GroupName "GroupName" | Get-ZabbixApplication
 		Get applications by GroupName
+	.Example
+		Get-ZabbixHost | ? name -eq SourceHost | Get-ZabbixApplication | New-ZabbixApplication -HostID (Get-ZabbixHost | ? name -match newHost).hostid
+		Clone application(s) from host to host
 	#>
     
 	[CmdletBinding()]
@@ -3870,7 +4351,7 @@ Function New-ZabbixApplication {
 		Get-ZabbixHost | ? name -match "hostName" | New-ZabbixApplication -Name newAppName
 		Create new application on host
 	.Example
-		Get-ZabbixHost | ? name -match sourceHost | Get-ZabbixApplication | New-ZabbixApplication -HostID (Get-ZabbixHost | ? name -match newHost).hostid
+		Get-ZabbixHost | ? name -eq SourceHost | Get-ZabbixApplication | New-ZabbixApplication -HostID (Get-ZabbixHost | ? name -match newHost).hostid
 		Clone application(s) from host to host
 	.Example
 		New-ZabbixApplication -Name newAppName -HostID (Get-ZabbixTemplate | ? name -match template).hostid
@@ -4377,7 +4858,7 @@ Function Get-ZabbixGraph {
 		Get graphs for multiple hosts
     .Example
 		Get-ZabbixHost | ? name -match "hostName" | Get-ZabbixGraph -expandName | ? {!$_.graphDiscovery} | select name -ExpandProperty gitems -Unique | ft -a
-		Get-ZabbixHost | ? name -match "runtime" | Get-ZabbixGraph  -expandName | ? { !$_.graphDiscovery } | select name -Unique
+		Get-ZabbixHost | ? name -match "hostName" | Get-ZabbixGraph  -expandName | ? { !$_.graphDiscovery } | select name -Unique
 		Get graphs for multiple hosts, sort out duplicates
 	.Example
         Get-ZabbixGraph -HostID (Get-ZabbixHost | ? name -match "multipleHosts").hostid | select @{n="host";e={$_.hosts.name}},name | ? host -match "host0[5,6]"| ? name -notmatch Network | sort host
@@ -4519,12 +5000,406 @@ Function Save-ZabbixGraph {
 	}
 	
 	if ($mail) {
-        if (!$from) {$from="zabbix@webcollage.net"}
+        if (!$from) {$from="zabbix@example.net"}
         if ($subject) {$subject="Zabbix: graphid: $GraphID. $subject"}
         if (!$subject) {$subject="Zabbix: graphid: $GraphID"}
 	    try {
             if ($body) {Send-MailMessage -from $from -to $to -subject $subject -body $body -Attachments $fileFullPath -SmtpServer $SMTPServer}
             else {Send-MailMessage -from $from -to $to -subject $subject -Attachments $fileFullPath -SmtpServer $SMTPServer}
         } catch {$_.exception.message}
+	}
+}
+
+Function Get-ZabbixMediaType { 
+	<#
+	.Synopsis
+		Get media types
+	.Description
+		Get media types
+	.Example
+		Get-ZabbixMediaType 
+		Get media types
+	.Example
+		Get-ZabbixMediaType | ? description -match email
+		Get Email media type 
+	.Example
+		Get-ZabbixMediaType | ? descr* -eq EmailMediaType | New-ZabbixMediaType -Description "DisabledCopyOfEmailMediaType" -status 1
+		Copy/Clone existing media type to new one, and disable it		
+	#>
+	[cmdletbinding()]
+	[Alias("gzmt")]
+	Param (
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$session=($global:zabSessionParams.session),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$id=($global:zabSessionParams.id),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$URL=($global:zabSessionParams.url)
+	)
+	
+	process {
+
+		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+		
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		$Body = @{
+			method = "mediatype.get"
+			params = @{
+				output = "extend"
+				selectUsers = "extend"
+			}
+
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
+	}
+}
+
+Function New-ZabbixMediaType { 
+	<#
+	.Synopsis
+		Create media types
+	.Description
+		Create media types
+	.Example
+		$EmailMediaTypeCreateParams=@{
+			Description="EmailMediaType-01"
+			Type=0
+			MaxAlertSendSessions=5
+			MaxAlertSendAttempts=5
+			AlertSendRetryInterval="12s"
+			SMTPServerIPorFQDN="mail.example.com"
+			SMTPServerPort=25
+			SMTPServerHostName="mail"
+			EmailAddressFrom="zabbix-01@example.com"
+			SMTPServerAuthentication=1
+			Username="testUser"
+			Passwd="TestUser"
+			SMTPServerConnectionSecurity=""
+			SMTPServerConnectionSecurityVerifyPeer=""
+			SMTPServerConnectionSecurityVerifyHost=""
+		}
+		New-ZabbixMediaType @EmailMediaTypeCreateParams
+		Create new Email (-type 0) media type
+	.Example
+		$PushMediaTypeCreateParams=@{
+			Description="Push notifications - 01"
+			Type=1
+			status=1
+			MaxAlertSendSessions=3
+			MaxAlertSendAttempts=3
+			AlertSendRetryInterval="7s"
+			ExecScriptName="push-notification.sh"
+			ExecScriptParams="{ALERT.SENDTO}\n{ALERT.SUBJECT}\n{ALERT.MESSAGE}\n"
+		}
+		New-ZabbixMediaType @PushMediaTypeCreateParams 
+		Create new meadia type with cystom options	
+	.Example
+		Get-ZabbixMediaType | ? descr* -eq EmailMediaType | New-ZabbixMediaType -Description "DisabledCopyOfEmailMediaType" -status 1
+		Copy/Clone existing media type to new one, and disable it
+	#>
+	[cmdletbinding()]
+	[Alias("nzmt")]
+	Param (
+		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)][string]$Description,
+		# Transport used by the media type. Possible values: 0 - e-mail; 1 - script; 2 - SMS; 3 - Jabber; 100 - Ez Texting.
+		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)][int]$Type,
+		# Email address from which notifications will be sent. Required for email media types.
+		[Alias("smtp_email")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$EmailAddressFrom,
+		# SMTP HELO. Required for email media types.
+		[Alias("smtp_helo")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$SMTPServerHostName,
+		# SMTP server. Required for email media types.
+		[Alias("smtp_server")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$SMTPServerIPorFQDN,
+		# SMTP server port.
+		[Alias("smtp_port")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$SMTPServerPort,
+		# SMTP server authentication required. Possible values: 0 - (default) disabled; 1 - enabled
+		[Alias("smtp_authentication")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$SMTPServerAuthentication,
+		# SMTP server connection security. Possible values: 0 - (default) disabled; 1 - StartTLS; 2 - SSL/TLS
+		[Alias("smtp_security")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$SMTPServerConnectionSecurity,
+		# SMTP server connection security. Possible values: 0 - (default) disabled; 1 - dnabled
+		[Alias("smtp_verify_peer")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$SMTPServerConnectionSecurityVerifyPeer,
+		# SMTP server connection security. Possible values: 0 - (default) disabled; 1 - dnabled
+		[Alias("smtp_verify_host")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$SMTPServerConnectionSecurityVerifyHost,
+		# Whether the media type is enabled. Possible values: 0 - (default) enabled; 1 - disabled.
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$status,
+		# Username or Jabber identifier. Required for Jabber and Ez Texting media types.
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Username,
+		# Authentication password. 
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Passwd,
+		# Serial device name of the GSM modem. Required for SMS media types.
+		[Alias("gsm_modem")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$GsmModem,
+		# For script media types exec_path contains the name of the executed script. 
+		[Alias("exec_path")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$ExecScriptName,
+		# Script parameters. Each parameter ends with a new line feed.
+		[Alias("exec_params")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$ExecScriptParams,
+		# The maximum number of alerts that can be processed in parallel. Possible values for SMS: 1 - (default) Possible values for other media types: 0-100
+		[Alias("maxsessions")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$MaxAlertSendSessions,
+		# The maximum number of attempts to send an alert. Possible values: 1-10 Default value: 3
+		[Alias("maxattempts")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$MaxAlertSendAttempts,
+		# The interval between retry attempts. Accepts seconds and time unit with suffix. Possible values: 0-60s Default value: 10s
+		[Alias("attempt_interval")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$AlertSendRetryInterval,
+		
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$session=($global:zabSessionParams.session),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$id=($global:zabSessionParams.id),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$URL=($global:zabSessionParams.url)
+	)
+	
+	process {
+
+		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+		
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		$Body = @{
+			method = "mediatype.create"
+			params = @{
+				description = $Description
+				type = $Type
+				status = $status
+			}
+
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		# General
+		if ($MaxAlertSendSessions) {$Body.params.maxsessions=$MaxAlertSendSessions}
+		if ($MaxAlertSendAttempts) {$Body.params.maxattempts=$MaxAlertSendAttempts}
+		if ($AlertSendRetryInterval) {$Body.params.attempt_interval=$AlertSendRetryInterval}
+		# Email
+		if ($SMTPServerIPorFQDN) {$Body.params.smtp_server=$SMTPServerIPorFQDN}
+		if ($SMTPServerPort) {$Body.params.smtp_port=$SMTPServerPort}
+		if ($SMTPServerHostName) {$Body.params.smtp_helo=$SMTPServerHostName}
+		if ($EmailAddressFrom) {$Body.params.smtp_email=$EmailAddressFrom}
+		if ($SMTPServerAuthentication) {$Body.params.smtp_authentication=$SMTPServerAuthentication}
+		if ($Username) {$Body.params.username=$Username}
+		if ($Passwd) {$Body.params.passwd=$Passwd}
+		if ($SMTPServerConnectionSecurity) {$Body.params.smtp_security=$SMTPServerConnectionSecurity}
+		if ($SMTPServerConnectionSecurityVerifyPeer) {$Body.params.smtp_verify_peer=$SMTPServerConnectionSecurityVerifyPeer}
+		if ($SMTPServerConnectionSecurityVerifyHost) {$Body.params.smtp_verify_host=$SMTPServerConnectionSecurityVerifyHost}
+		# Other
+		if ($ExecScriptName) {$Body.params.exec_path=$ExecScriptName} 
+		if ($ExecScriptParams) {$Body.params.exec_params="$ExecScriptParams`n"} 
+		if ($GsmModem) {$Body.params.gsm_modem=$GsmModem} 
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
+	}
+}
+
+Function Set-ZabbixMediaType { 
+	<#
+	.Synopsis
+		Set media types
+	.Description
+		Set media types
+	.Example
+		Get-ZabbixMediatype | ? name -eq EmailMediaType-01 | Set-ZbbixMediaType -status 1
+		Disable the media type
+	.Example
+		Get-ZabbixMediatype | ? name -like *email* | Set-ZbbixMediaType -AlertSendRetryInterval "7s" -EmailAddressFrom "zabbix-02@example.com"
+		Update all media types, contain "email" in the description field
+	.Example
+		$EmailMediaTypeCreateParams=@{
+			Description="EmailMediaType-01"
+			Type=0
+			MaxAlertSendSessions=5
+			MaxAlertSendAttempts=5
+			AlertSendRetryInterval="12s"
+			SMTPServerIPorFQDN="mail.example.com"
+			SMTPServerPort=25
+			SMTPServerHostName="mail"
+			EmailAddressFrom="zabbix-01@example.com"
+			SMTPServerAuthentication=1
+			Username="testUser"
+			Passwd="TestUser"
+			SMTPServerConnectionSecurity=""
+			SMTPServerConnectionSecurityVerifyPeer=""
+			SMTPServerConnectionSecurityVerifyHost=""
+		}
+		Get-ZabbixMediaType | ? Description -like *email* | Set-ZabbixMediaType @EmailMediaTypeCreateParams
+		Update settings in multiple media types
+	.Example
+		$PushMediaTypeCreateParams=@{
+			Description="Push notifications - 01"
+			Type=1
+			status=1
+			MaxAlertSendSessions=3
+			MaxAlertSendAttempts=3
+			AlertSendRetryInterval="7s"
+			ExecScriptName="push-notification.sh"
+			ExecScriptParams="{ALERT.SENDTO}\n{ALERT.SUBJECT}\n{ALERT.MESSAGE}\n"
+		}
+		Get-ZabbixMediaType | ? Description -like *push* | Set-ZabbixMediaType @PushMediaTypeCreateParams 
+		Update multiple media types
+	#>
+	[cmdletbinding()]
+	[Alias("szmt")]
+	Param (
+
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$mediatypeid,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Description,
+		# Transport used by the media type. Possible values: 0 - e-mail; 1 - script; 2 - SMS; 3 - Jabber; 100 - Ez Texting.
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$Type,
+		# Email address from which notifications will be sent. Required for email media types.
+		[Alias("smtp_email")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$EmailAddressFrom,
+		# SMTP HELO. Required for email media types.
+		[Alias("smtp_helo")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$SMTPServerHostName,
+		# SMTP server. Required for email media types.
+		[Alias("smtp_server")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$SMTPServerIPorFQDN,
+		# SMTP server port.
+		[Alias("smtp_port")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$SMTPServerPort,
+		# SMTP server authentication required. Possible values: 0 - (default) disabled; 1 - enabled
+		[Alias("smtp_authentication")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$SMTPServerAuthentication,
+		# SMTP server connection security. Possible values: 0 - (default) disabled; 1 - StartTLS; 2 - SSL/TLS
+		[Alias("smtp_security")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$SMTPServerConnectionSecurity,
+		# SMTP server connection security. Possible values: 0 - (default) disabled; 1 - dnabled
+		[Alias("smtp_verify_peer")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$SMTPServerConnectionSecurityVerifyPeer,
+		# SMTP server connection security. Possible values: 0 - (default) disabled; 1 - dnabled
+		[Alias("smtp_verify_host")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$SMTPServerConnectionSecurityVerifyHost,
+		# Whether the media type is enabled. Possible values: 0 - (default) enabled; 1 - disabled.
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$status,
+		# Username or Jabber identifier. Required for Jabber and Ez Texting media types.
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Username,
+		# Authentication password. 
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Passwd,
+		# Serial device name of the GSM modem. Required for SMS media types.
+		[Alias("gsm_modem")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$GsmModem,
+		# For script media types exec_path contains the name of the executed script. 
+		[Alias("exec_path")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$ExecScriptName,
+		# Script parameters. Each parameter ends with a new line feed.
+		[Alias("exec_params")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$ExecScriptParams,
+		# The maximum number of alerts that can be processed in parallel. Possible values for SMS: 1 - (default) Possible values for other media types: 0-100
+		[Alias("maxsessions")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$MaxAlertSendSessions,
+		# The maximum number of attempts to send an alert. Possible values: 1-10 Default value: 3
+		[Alias("maxattempts")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$MaxAlertSendAttempts,
+		# The interval between retry attempts. Accepts seconds and time unit with suffix. Possible values: 0-60s Default value: 10s
+		[Alias("attempt_interval")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$AlertSendRetryInterval,
+		
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$session=($global:zabSessionParams.session),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$id=($global:zabSessionParams.id),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$URL=($global:zabSessionParams.url)
+	)
+	
+	process {
+
+		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+		
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		$Body = @{
+			method = "mediatype.update"
+			params = @{
+				mediatypeid = $mediatypeid
+				description = $Description
+				type = $Type
+				status = $status
+			}
+
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		# General
+		if ($MaxAlertSendSessions) {$Body.params.maxsessions=$MaxAlertSendSessions}
+		if ($MaxAlertSendAttempts) {$Body.params.maxattempts=$MaxAlertSendAttempts}
+		if ($AlertSendRetryInterval) {$Body.params.attempt_interval=$AlertSendRetryInterval}
+		# Email
+		if ($SMTPServerIPorFQDN) {$Body.params.smtp_server=$SMTPServerIPorFQDN}
+		if ($SMTPServerPort) {$Body.params.smtp_port=$SMTPServerPort}
+		if ($SMTPServerHostName) {$Body.params.smtp_helo=$SMTPServerHostName}
+		if ($EmailAddressFrom) {$Body.params.smtp_email=$EmailAddressFrom}
+		if ($SMTPServerAuthentication) {$Body.params.smtp_authentication=$SMTPServerAuthentication}
+		if ($Username) {$Body.params.username=$Username}
+		if ($Passwd) {$Body.params.passwd=$Passwd}
+		if ($SMTPServerConnectionSecurity) {$Body.params.smtp_security=$SMTPServerConnectionSecurity}
+		if ($SMTPServerConnectionSecurityVerifyPeer) {$Body.params.smtp_verify_peer=$SMTPServerConnectionSecurityVerifyPeer}
+		if ($SMTPServerConnectionSecurityVerifyHost) {$Body.params.smtp_verify_host=$SMTPServerConnectionSecurityVerifyHost}
+		# Other
+		if ($ExecScriptName) {$Body.params.exec_path=$ExecScriptName} 
+		if ($ExecScriptParams) {$Body.params.exec_params="$ExecScriptParams`n"} 
+		if ($GsmModem) {$Body.params.gsm_modem=$GsmModem} 
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
+	}
+}
+
+Function Remove-ZabbixMediaType { 
+	<#
+	.Synopsis
+		Get media types
+	.Description
+		Get media types
+	.Example
+		Get-ZabbixMediaType | ? descr* -match MediatypeToDelete | Remove-ZabbixMediaType -WhatIf
+		WhatIf on deleting media types
+	.Example
+		Get-ZabbixMediaType | ? descr* -match MediatypeToDelete | Remove-ZabbixMediaType
+		Remove media types
+	.Example
+		Delete-ZabbixMediaType -mediatypeid (Get-ZabbixMediaType | ? descr* -match MediTypeToDelete-0[1-3]).mediatypeid
+		Delete media types
+	#>
+	[cmdletbinding(SupportsShouldProcess,ConfirmImpact='High')]
+	[Alias("rzmt","Delete-ZabbixMediaType")]
+	Param (
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$mediatypeid,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$session=($global:zabSessionParams.session),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$id=($global:zabSessionParams.id),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$URL=($global:zabSessionParams.url)
+	)
+	
+	process {
+
+		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		if (!(Get-ZabbixSession)) {return}
+		
+		$boundparams=$PSBoundParameters | out-string
+		write-verbose "($boundparams)"
+
+		$Body = @{
+			method = "mediatype.delete"
+			params = @(
+				$mediatypeid
+			)
+
+			jsonrpc = $jsonrpc
+			id = $id
+			auth = $session
+		}
+
+		$BodyJSON = ConvertTo-Json $Body
+		write-verbose $BodyJSON
+		
+		if ([bool]$WhatIfPreference.IsPresent) {}
+		if ($PSCmdlet.ShouldProcess($mediatypeid,"Delete")) {  
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		}
+		# $a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+		if ($a.result) {$a.result} else {$a.error}
 	}
 }

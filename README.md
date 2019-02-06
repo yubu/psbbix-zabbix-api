@@ -6,7 +6,7 @@ Powershell Module for Zabbix API
 - Tested with Zabbix 2.4
 - Tested with Zabbix 3.4 
 - Tested with Powershell 5.0+
-- Tested with Powershell 6.0
+- Tested with Powershell Core 6.0+
 
 ##### Based on:
 - [Zabbix](<https://onedrive.live.com/?cid=3b909e9df5dc497a&id=3B909E9DF5DC497A%213668&ithint=folder,psm1&authkey=!AJrwHxfukZT-ueA>) by Benjamin RIOUAL
@@ -18,10 +18,9 @@ Powershell Module for Zabbix API
 - [Zabbix 3.4 API documentation](<https://www.zabbix.com/documentation/3.4/manual/api>)
 
 ### Warning:
-- Breaking change: New-ZabbixHost is broken
-- Breaking change: cmdlets Get-ZabbixGroup and Set-ZabbixGroup were renamed to Get-ZabbixHostGroup and Set-ZabbixHostGroup. The old cmdlets will continue to work, thank to aliases. But will be depricated in the future.
 - Be careful. Especially with the mass delete and the mass update. 
 - Bugs happen. Use on your own risk.
+- Breaking change: cmdlets Get-ZabbixGroup and Set-ZabbixGroup were renamed to Get-ZabbixHostGroup and Set-ZabbixHostGroup. The old cmdlets will continue to work, thank to aliases. But will be depricated in the future.
 
 ### Installation from Github
 ```powershell
@@ -36,7 +35,7 @@ git clone https://github.com/yubu/ps.testPassword.git
 Import-Module c:\temp\ps.passwordTest\ps.passwordTest.psm1
 ```
 ### Installation from Powershell Gallery 
-### Not in Gallery yet
+### (Not in Gallery yet!)
     Install-Module psbbix
 
 ### Installation from Powershell Gallery prerelease version

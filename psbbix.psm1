@@ -528,7 +528,7 @@ Function Set-ZabbixHost {
 		# [Alias("parentTemplates")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$templates,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$templates,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)]$Inventory,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$HostDescription,
+		[Alias("description")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$HostDescription,
 		# Host inventory population mode: Possible values are: -1 - disabled; 0 - (default) manual; 1 - automatic.
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$InventoryMode,
 		# IPMI authentication algorithm: Possible values are: -1 - (default) default; 0 - none; 1 - MD2; 2 - MD5; 4 - straight; 5 - OEM; 6 - RMCP+

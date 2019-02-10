@@ -1,17 +1,28 @@
 # Changelog
-##### [0.2.0-alpha2] - 2019-02-05
+##### [0.2.0-alpha.3] - 2019-02-11
 ##### Breaking change
 - cmdlets Get-ZabbixGroup and Set-ZabbixGroup were renamed to Get-ZabbixHostGroup and Set-ZabbixHostGroup
-- However old Get-ZabbixGroup and Set-ZabbixGroup will continue to work, thank to aliases. But they will be depricated in the future.
+- However old Get-ZabbixGroup and Set-ZabbixGroup will continue to work, thank to aliases. But they will be depricated in the future
 ##### Fixed
-- Removed annoying splatting parameter: @zabSessionParams. The paraneter still exist, and can be used, if needed.
+- A lot of minor things
+
+##### Added
+```powershell
+Get-ZabbixHostInventory (experimental)
+Set-ZabixHostInventory (experimental)
+``` 
+##### [0.2.0-alpha.2] - 2019-02-05
+##### Breaking change
+- cmdlets Get-ZabbixGroup and Set-ZabbixGroup were renamed to Get-ZabbixHostGroup and Set-ZabbixHostGroup
+- However old Get-ZabbixGroup and Set-ZabbixGroup will continue to work, thank to aliases. But they will be depricated in the future
+##### Fixed
+- Removed annoying splatting parameter: @zabSessionParams. The parameter still exist, and can be used, if needed
 - Connect-Zabbix
 - Disconnect-Zabbix
 - New-ZabbixHost
 - Set-ZabbixHost
 - Set-Zabbixuser
 - A lot of minor things
-
 ##### Added
 ```powershell
 Copy-ZabbixHost
@@ -51,7 +62,7 @@ Set-ZabbixTemplate
 ##### [0.1.6-bf-beta.1] - 2016-10-09
 ##### Added
 - Validations
-- Usability improvemets 
+- Usability improvements 
 
 ##### [0.1.6-bf-beta] - 2016-10-05
 ##### Added

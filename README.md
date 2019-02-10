@@ -22,6 +22,27 @@ Powershell Module for Zabbix API
 - Bugs happen. Use on your own risk.
 - Breaking change: cmdlets Get-ZabbixGroup and Set-ZabbixGroup were renamed to Get-ZabbixHostGroup and Set-ZabbixHostGroup. The old cmdlets will continue to work, thank to aliases. But will be depricated in the future.
 
+### Experimental:
+Get-ZabbixHostInventory
+- Get stats from inventories
+```powershell
+Get-ZabbixHostInventory | ? os | group os -NoElement | sort count -desc
+Get-ZabbixHostInventory | ? os -match linux | select hostid,name,os,tag | ft -a
+Get-ZabbixHostInventory | ? location | group location -NoElement | sort count -desc
+```
+Set-ZabbixHostInventory
+- Mass population the hosts' inventories:
+```powershell
+Example: input-inventory-mass-data.csv (two hosts)
+
+HostID,Type,TypeDetails,Name,Alias,OSName,OSFullName,OSShortName,SerialNumberA,SerialNumberB,Tag,AssetTag,MACAddressA,MACAddressB,Hardware,DetailedHardware,Software,SoftwareDetails,SoftwareApplicationA,SoftwareApplicationB,SoftwareApplicationC,SoftwareApplicationD,SoftwareApplicationE,ContactPerson,Location,LocationLatitude,LocationLongitude,Notes,Chassis,Model,HWArchitecture,Vendor,ContractNumber,InstallerName,DeploymentStatus,URLA,URLB,URLC,HostNetworks,HostSubnetMask,HostRouter,OOBIPAddress,OOBHostSubnetMask,OOBRouter,HWPurchaseDate,HWInstallationDate,HWMaintenanceExpiryDate,HWDecommissioningDate,SiteAddressA,SiteAddressB,SiteAddressC,SiteCity,SiteState,SiteCountry,SiteZIPCode,SiteRackLocation,SiteNotes,PrimaryPOCName,PrimaryEmail,PrimaryPOCPhoneA,PrimaryPOCPhoneB,PrimaryPOCMobileNumber,PrimaryPOCScreenName,PrimaryPOCnNotes,SecondaryPOCName,SecondaryPOCEmail,SecondaryPOCPhoneA,SecondaryPOCPhoneB,SecondaryPOCMobileNumber,SecondaryPOCScreenName,SecondaryPOCNotes
+10000,Type,TypeDetails,Name,Alias,OSName,DetailedOSName,ShortOSName,SerialNumberA,SerialNumberBB,Tag,AssetTag,MACAddressA,MACAddressB,Hardware,DetailedHardware,Software,SoftwareDetails,SoftwareApplicationA,SoftwareApplicationB,SoftwareApplicationC,SoftwareApplicationD,SoftwareApplicationE,ContactPerson,Location,LocLat,LocLong,Notes,Chassis,Model,HWArchitecture,Vendor,ContractNumber,InstallerName,DeploymentStatus,URLA,URLB,URLC,HostNetworks,HostSubnetMask,HostRouter,OOBIPAddress,OOBHostSubnetMask,OOBRouter,HWPurchaseDate,HWInstallationDate,HWMaintenanceExpiryDate,HWDecommissioningDate,SiteAddressA,SiteAddressB,SiteAddressC,SiteCity,SiteState,SiteCountry,SiteZIPCode,SiteRackLocation,SiteNotes,PrimaryPOCName,PrimaryEmail,PrimaryPOCPhoneA,PrimaryPOCPhoneB,PrimaryPOCMobileNumber,PrimaryPOCScreenName,PrimaryPOCnNotes,SecondaryPOCName,SecondaryPOCEmail,SecondaryPOCPhoneA,SecondaryPOCPhoneB,SecondaryPOCMobileNumber,SecondaryPOCScreenName,SecondaryPOCNotes
+10001,Type,TypeDetails,Name,Alias,OSName,DetailedOSName,ShortOSName,SerialNumberA,SerialNumberBB,Tag,AssetTag,MACAddressA,MACAddressB,Hardware,DetailedHardware,Software,SoftwareDetails,SoftwareApplicationA,SoftwareApplicationB,SoftwareApplicationC,SoftwareApplicationD,SoftwareApplicationE,ContactPerson,Location,LocLat,LocLong,Notes,Chassis,Model,HWArchitecture,Vendor,ContractNumber,InstallerName,DeploymentStatus,URLA,URLB,URLC,HostNetworks,HostSubnetMask,HostRouter,OOBIPAddress,OOBHostSubnetMask,OOBRouter,HWPurchaseDate,HWInstallationDate,HWMaintenanceExpiryDate,HWDecommissioningDate,SiteAddressA,SiteAddressB,SiteAddressC,SiteCity,SiteState,SiteCountry,SiteZIPCode,SiteRackLocation,SiteNotes,PrimaryPOCName,PrimaryEmail,PrimaryPOCPhoneA,PrimaryPOCPhoneB,PrimaryPOCMobileNumber,PrimaryPOCScreenName,PrimaryPOCnNotes,SecondaryPOCName,SecondaryPOCEmail,SecondaryPOCPhoneA,SecondaryPOCPhoneB,SecondaryPOCMobileNumber,SecondaryPOCScreenName,SecondaryPOCNotes
+
+Command:
+Import-csv input-inventory-mass-data.csv | %{$splatParams=@{}}{$splatParams=(("$_").trim('@{}').replace("; ","`r`n") | ConvertFrom-StringData); Set-ZabbixHostInventory @splatParams}
+```
+
 ### Installation from Github
 ```powershell
 cd $env:Userprofile\Documents\WindowsPowerShell\Modules\
@@ -121,6 +142,12 @@ If host has multiple linked templates and then Set-ZabbixHost will be executed w
 ```powershell
 ## this will work:
 Get-ZabbixHost -HostName HostName | Set-ZabbixHost -TemplateID ExistingTemplateID,ExistingTemplateID,NewTemplateID
+## and this:
+$templateID=(Get-ZabbixTemplate -HostID (Get-ZabbixHost | ? name -match hostname).hostid).templateid
+#Store existing templateIDs
+$templateID+=(Get-ZabbixTemplate | ? name -match "newTemplate").templateid
+#Add new templateIDs
+Get-ZabbixHost | ? name -match hosts | Set-ZabbixHost -TemplateID $templateID 
 ```
 
 

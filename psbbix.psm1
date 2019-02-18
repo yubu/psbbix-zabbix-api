@@ -131,6 +131,8 @@ Function New-ZabbixSession {
     
 	# if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 
+	if ($PSCredential.UserName.Contains("\") -or $PSCredential.UserName.Contains("@")) {write-host "Please omit the domain from the username when you use ldap authentication`n" -f red; return}
+
 	$Body = @{
 	    jsonrpc = "2.0"
 	    method = "user.login"

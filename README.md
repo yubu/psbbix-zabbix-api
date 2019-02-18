@@ -46,14 +46,14 @@ Import-csv input-inventory-mass-data.csv | %{$splatParams=@{}}{$splatParams=(("$
 ### Installation from Github
 ```powershell
 cd $env:Userprofile\Documents\WindowsPowerShell\Modules\
-git clone https://github.com/yubu/ps.testPassword.git
-Import-Module ps.passwordTest
+git clone https://github.com/yubu/psbbix-zabbix-api.git
+Import-Module psbbix
 ```
 or
 ```powershell
 cd c:\temp
-git clone https://github.com/yubu/ps.testPassword.git
-Import-Module c:\temp\ps.passwordTest\ps.passwordTest.psm1
+git clone https://github.com/yubu/psbbix-zabbix-api.git
+Import-Module c:\temp\psbbix-zabbix-api\psbbix.psm1
 ```
 ### Installation from Powershell Gallery 
 ### (Not in Gallery yet!)

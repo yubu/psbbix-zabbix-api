@@ -43,17 +43,17 @@ Command:
 Import-csv input-inventory-mass-data.csv | %{$splatParams=@{}}{$splatParams=(("$_").trim('@{}').replace("; ","`r`n") | ConvertFrom-StringData); Set-ZabbixHostInventory @splatParams}
 ```
 
-### Installation from Github
+### Installation from GitHub
 ```powershell
 cd $env:Userprofile\Documents\WindowsPowerShell\Modules\
-git clone https://github.com/yubu/ps.testPassword.git
-Import-Module ps.passwordTest
+git clone https://github.com/yubu/psbbix.git
+Import-Module psbbix
 ```
 or
 ```powershell
 cd c:\temp
-git clone https://github.com/yubu/ps.testPassword.git
-Import-Module c:\temp\ps.passwordTest\ps.passwordTest.psm1
+git clone https://github.com/yubu/psbbix.git
+Import-Module c:\temp\psbbix\psbbix.psm1
 ```
 ### Installation from Powershell Gallery 
 ### (Not in Gallery yet!)

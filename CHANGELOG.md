@@ -1,4 +1,21 @@
 # Changelog
+##### [0.2.0-alpha.4] - 2019-02-28
+##### Breaking change
+- cmdlets Get-ZabbixGroup and Set-ZabbixGroup were renamed to Get-ZabbixHostGroup and Set-ZabbixHostGroup
+- However old Get-ZabbixGroup and Set-ZabbixGroup will continue to work, thank to aliases. But they will be depricated in the future
+##### Fixed
+- Get-ZabbixUser
+- Get-ZabbixUserGroup
+- New-ZabbixUser
+- Set-ZabbixUser
+
+##### Added
+```powershell
+New-ZabbixUserGroup
+Set-ZabbixUserGroup
+Remove-ZabixUserGroup
+``` 
+
 ##### [0.2.0-alpha.3] - 2019-02-11
 ##### Breaking change
 - cmdlets Get-ZabbixGroup and Set-ZabbixGroup were renamed to Get-ZabbixHostGroup and Set-ZabbixHostGroup

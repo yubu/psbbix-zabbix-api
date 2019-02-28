@@ -1,4 +1,3 @@
-
 # Load additional libraries
 Push-Location $psScriptRoot
 . .\epoch-time-convert.ps1
@@ -503,6 +502,26 @@ Function Set-ZabbixHost {
 		Set/update host settings
 	.Parameter HostID
 		HostID
+	.Parameter HostName
+		Host name
+	.Parameter HostVisibleName
+		Host visible name: Default: host property value
+	.Parameter HostDescription
+		Description of the host
+	.Parameter status
+		Status and function of the host: Possible values are: 0 - (default) monitored host; 1 - unmonitored host
+	.Parameter InventoryMode
+		InventoryMode: Possible values are: -1 - disabled; 0 - (default) manual; 1 - automatic
+	.Parameter IpmiAuthtype
+		IPMI: IpmiAuthtype: IPMI authentication algorithm: Possible values are: -1 - (default) default; 0 - none; 1 - MD2; 2 - MD5 4 - straight; 5 - OEM; 6 - RMCP+
+	.Parameter IpmiUsername
+		IPMI: IpmiUsername: IPMI username
+	.Parameter IpmiPassword
+		IPMI: IpmiPassword: IPMI password
+	.Parameter IpmiPrivilege
+		IPMI: IpmiPrivilege: IPMI privilege level: Possible values are: 1 - callback; 2 - (default) user; 3 - operator; 4 - admin; 5 - OEM
+	.Parameter GroupID
+		GroupID of host group
 	.Example
 		Get-ZabbixHost | ? name -eq "host" | Set-ZabbixHost -status 0
 		Enable host (-status 0)
@@ -550,7 +569,8 @@ Function Set-ZabbixHost {
 	[Alias("szhst")]
 	Param (
         [Alias("host")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$HostName,
-        [Alias("name")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$HostVisibleName,
+		# Visible name of the host. Default: host property value.
+		[Alias("name")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$HostVisibleName,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$HostID,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][array]$GroupID,
         [Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$groups,
@@ -1044,9 +1064,9 @@ Function Get-ZabbixTemplate {
 Function New-ZabbixTemplate {
 	<# 
 	.Synopsis
-		Create templates on zabbix server
+		Create new template
 	.Description
-	Create templates on zabbix server
+		Create new template
 	.Parameter TemplateHostName
 		(Required) Template hostname: Technical name of the template
 	.Parameter TemplateName
@@ -1060,11 +1080,11 @@ Function New-ZabbixTemplate {
 	.Parameter hosts
 		Hosts to link the template to
 	.Example
-		New-ZabbixTemplate -TemplateHostName "newTemplateName" -groups ((Get-ZabbixHostGroup | ? name -match hostGroup).groupid) -hosts (Get-ZabbixHost | ? name -match hostName).hostid -templates (Get-ZabbixTemplate | ? name -eq "TemplateName" ).templateid
+		New-ZabbixTemplate -TemplateHostName "newTemplateName" -GroupID ((Get-ZabbixHostGroup | ? name -match Templates).groupid) -HostID (Get-ZabbixHost | ? name -match hostName).hostid -templates (Get-ZabbixTemplate | ? name -eq "TemplateName" ).templateid
 		Create new template 
 	.Example
-		New-ZabbixTemplate -TemplateHostName newTemplateName -groups ((Get-ZabbixHostGroup | ? name -match hostGroup).groupid) -hosts (Get-ZabbixHost | ? name -match host).hostid -templates (Get-ZabbixTemplate | ? name -match "ICMP" ).templateid  -AddDefaultTemplateGroup
-		Create new template and additionally to default Template grouo (1) 
+		Get-ZabbixTemplate | ? name -eq "Template OS Linux" | New-ZabbixTemplate -TemplateHostName "Template OS Linux - Clone" -TemplateDescription "description"
+		Clone template (partially: groups, linked templates and hosts)
 	.Example
 		New-ZabbixTemplate -TemplateHostName "newTemplateName"
 		Create new template
@@ -1073,14 +1093,22 @@ Function New-ZabbixTemplate {
 	[CmdletBinding()]
 	[Alias("nzt")]
 	Param (
-		[Parameter(Mandatory=$True)][string]$TemplateHostName,
-		[Parameter(Mandatory=$False)][string]$TemplateName,
-		[Parameter(Mandatory=$False)][string]$TemplateDescription,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$groups,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$templates,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$hosts,
+		[Alias("host")][Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)][string]$TemplateHostName,
+		# [Alias("name")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$TemplateVisibleName,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$TemplateDescription,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][array]$TemplateID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$GroupID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$HostID,
+		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$groups,
+		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$templates,
+		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$hosts,
+		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$parentTemplates,
+		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$screens,
+		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$applications,
+		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$triggers,
+		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$httpTests,
 		# [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$macros,
-		[switch]$AddDefaultTemplateGroup,
+		# [switch]$AddToDefaultTemplateGroup,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$session=($global:zabSessionParams.session),
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$id=($global:zabSessionParams.id),
@@ -1099,24 +1127,20 @@ Function New-ZabbixTemplate {
 		write-verbose ("hosts:  " + $hosts.length)
 		write-verbose ("templates:  " + $templates.length)
 
-		if (!$groups) {$groups=1} 
-		if ($AddDefaultTemplateGroup) {$groups+=1}
+		if (!$GroupID -and !$groups) {$GroupID=1} 
 
-		for ($i=0; $i -lt $groups.length; $i++) {[array]$grp+=$(@{groupid = $($groups[$i])})}
-		for ($i=0; $i -lt $hosts.length; $i++) {[array]$hst+=$(@{hostid = $($hosts[$i])})}
-		for ($i=0; $i -lt $templates.length; $i++) {[array]$tmpl+=$(@{templateid = $($templates[$i])})}
+		for ($i=0; $i -lt $GroupID.length; $i++) {[array]$grp+=$(@{groupid = $($GroupID[$i])})}
+		for ($i=0; $i -lt $HostID.length; $i++) {[array]$hst+=$(@{hostid = $($HostID[$i])})}
+		for ($i=0; $i -lt $TemplateID.length; $i++) {[array]$tmpl+=$(@{templateid = $($TemplateID[$i])})}
 		# for ($i=0; $i -lt $macros.length; $i++) {[array]$mcr+=$(@{macroid = $($macros[$i])})}
 		
-		# $gr
-		# $hst
-
 		$Body = @{
 			method = "template.create"
 			params = @{
 				host = $TemplateHostName
-				name = $TemplateName
+				# name = $TemplateVisibleName
 				description = $TemplateDescription
-				groups = @($grp)
+				groups = if ($GroupID) {@($grp)} else {$groups}
 			}
 
 			jsonrpc = $jsonrpc
@@ -1124,8 +1148,13 @@ Function New-ZabbixTemplate {
 			auth = $session
 		}
 
-		if ($hosts) {$Body.params.hosts=@($hst)}
-		if ($templates) {$Body.params.templates=@($tmpl)}
+		if ($HostID) {$Body.params.hosts=@($hst)} elseif ($hosts) {$Body.params.hosts=$hosts | select hostid}
+		if ($TemplateID) {$Body.params.templates=@($tmpl)} elseif ($parentTemplates) {$Body.params.templates=$parentTemplates | select templateid}
+		# if ($parentTemplates) {$Body.params.parentTemplates=$parentTemplates | select tmplateid}
+		# if ($screens) {$Body.params.screens=$screens}
+		# if ($applications) {$Body.params.applications=$applications}
+		# if ($httpTests) {$Body.params.httpTests=$httpTests}
+		# if ($triggers) {$Body.params.httpTests=$triggers}
 
 		$BodyJSON = ConvertTo-Json $Body -Depth 3
 		write-verbose $BodyJSON
@@ -1139,31 +1168,43 @@ Function New-ZabbixTemplate {
 Function Set-ZabbixTemplate {
 	<# 
 	.Synopsis
-		Set templates from zabbix server
+		Update template
 	.Description
-		Set templates from zabbix server
+		Update template
+	.Parameter TemplateID
+		Template ID
+	.Parameter TemplateHostName
+		TemplateHostName: Technical name of the template
+	.Parameter TemplateVisibleName
+		TemplateVisibleName: Visible name of the template
+	.Parameter TemplateDescription
+		TemplateDescription: Description of the template
 	.Example
-		Get-ZabbixTemplate | ? name -match oldTemplateName | select templateid,name | Set-ZabbixTemplate -TemplateName "newTemplateName"
-		Rename template
+		Get-ZabbixTemplate | ? host -match oldTemplateName | Set-ZabbixTemplate -TemplateHostName "newTemplateName"
+		Update template host name
+	.Example
+		Get-ZabbixTemplate | ? name -match oldTemplateName | Set-ZabbixTemplate -TemplateVisibleName "newTemplateName"
+		Update template visible name
 	.Example
 		Set-ZabbixTemplate -TemplateVisibleName newTemplateName -TemplateID 10404
-		Rename template
+		Update template visible name
 	.Example
 		Get-ZabbixTemplate | ? name -eq templateName | Set-ZabbixTemplate -TemplateVisibleName VisibleTemplateName -groups 24,25 -hosts (Get-ZabbixHost | ? name -match host).hostid  -Verbose -templates (Get-ZabbixTemplate | ? name -eq "Template App HTTP Service" ).templateid
-		Replace  values in the template
+		Replace values in the template
 	.Example
 		$addTempID=(Get-ZabbixTemplate | ? host -eq currentTemplate).parenttemplates.templateid
 		$addTempID+=((Get-ZabbixTemplate | ? name -match FTP).templateid)
 		$addGrpID=(Get-ZabbixTemplate | ? host -eq currentTemplate).groups.groupid
 		$addGrpID+=(Get-ZabbixHostGroup | ? name -match hostGroup).groupid
-		Get-ZabbixTemplate | ? name -eq currentTemplat | Set-ZabbixTemplate -GroupsID $addTempID -TemplatesID $addGrpID -verbose -TemplateDescription "TemplateDescription"
+		Get-ZabbixTemplate | ? name -eq currentTemplate | Set-ZabbixTemplate -GroupsID $addTempID -TemplatesID $addGrpID -TemplateDescription "TemplateDescription"
 		This will add new values to already existing ones, i.e add, and not replace
 	#>
     
 	[CmdletBinding()]
 	[Alias("szt")]
 	Param (
-		[Alias("Name")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName)][string]$TemplateVisibleName,
+		[Alias("host")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName)][string]$TemplateHostName,
+		[Alias("name")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName)][string]$TemplateVisibleName,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName)][string]$TemplateDescription,
 		[Parameter(DontShow,Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$TemplateID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][array]$GroupsID,
@@ -1197,7 +1238,7 @@ Function Set-ZabbixTemplate {
 		$Body = @{
 			method = "template.update"
 			params = @{
-				
+				host = $TemplateHostName
 				templateid = $TemplateID
 				name = $TemplateVisibleName
 				description = $TemplateDescription
@@ -1223,19 +1264,19 @@ Function Set-ZabbixTemplate {
 Function Remove-ZabbixTemplate {
 	<# 
 	.Synopsis
-		Remove templates from zabbix server
+		Remove template
 	.Description
-		Remove templates from zabbix server
+		Remove template
 	.Example
 		Get-ZabbixTemplate | ? name -match templateName | Remove-ZabbixTemplate
-		Remove templates
+		Remove template
 	.Example
-		gzt | ? name -match templateName | select templateid,name | Remove-ZabbixTemplate
-		Remove templates 
+		gzt | ? name -match templateName | Remove-ZabbixTemplate
+		Remove templates
 	#>
     
 	[CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
-	[Alias("rzt","dzt")]
+	[Alias("rzt","dzt","Delete-ZabbixTemplate")]
 	Param (
         [Alias("Name")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateName,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
@@ -1279,9 +1320,9 @@ Function Remove-ZabbixTemplate {
 Function Get-ZabbixHostGroup {
 	<#
 	.Synopsis
-		Get Zabbix hostt groups
+		Get host group
 	.Description
-		Get Zabbix host groups
+		Get host group
 	.Parameter GroupName
 		Filter by name of the group
 	.Parameter GroupID
@@ -1364,9 +1405,9 @@ Function Get-ZabbixHostGroup {
 Function Set-ZabbixHostGroup {
 	<# 
 	.Synopsis
-		Set host groups
+		Set host group
 	.Description
-		Set host groups
+		Set host group
 	.Parameter GroupName
 		To filter by name of the group
 	.Parameter GroupID
@@ -1423,9 +1464,9 @@ Function Set-ZabbixHostGroup {
 Function New-ZabbixHostGroup {
 	<# 
 	.Synopsis
-		Create host groups
+		Create host group
 	.Description
-		Create host groups
+		Create host group
 	.Parameter GroupName
 		To filter by name of the group
 	.Parameter GroupID
@@ -1474,9 +1515,9 @@ Function New-ZabbixHostGroup {
 Function Remove-ZabbixHostGroup {
 	<# 
 	.Synopsis
-		Remove host groups
+		Remove host group
 	.Description
-		Remove host groups
+		Remove host group
 	.Parameter GroupName
 		To filter by name of the group
 	.Parameter GroupID
@@ -1531,9 +1572,9 @@ Function Remove-ZabbixHostGroup {
 Function Set-ZabbixHostGroupRemoveHosts {
 	<# 
 	.Synopsis
-		Set host groups: remove hosts from multiple groups 
+		Set host group: remove hosts from multiple groups 
 	.Description
-		Set host groups: remove hosts from multiple groups
+		Set host group: remove hosts from multiple groups
 	.Parameter GroupName
 		To filter by name of the group
 	.Parameter GroupID
@@ -1610,9 +1651,9 @@ Function Set-ZabbixHostGroupRemoveHosts {
 Function Set-ZabbixHostGroupAddHosts {
 	<# 
 	.Synopsis
-		Set host groups: add hosts to multiple groups 
+		Set host group: add hosts to multiple groups 
 	.Description
-		Set host groups: add hosts to multiple groups
+		Set host group: add hosts to multiple groups
 	.Parameter GroupName
 		To filter by name of the group
 	.Parameter GroupID
@@ -2144,9 +2185,9 @@ Function New-ZabbixMaintenance {
  Function Get-ZabbixHttpTest {
 	<# 
 	.Synopsis
-		Get web/http tests
+		Get web/http test
 	.Description
-		Get web/http tests
+		Get web/http test
 	.Parameter HttpTestName
 		To filter by name of the http test
 	.Example
@@ -2850,9 +2891,9 @@ function Import-ZabbixConfiguration {
 Function Get-ZabbixTrigger {
 	<# 
 	.Synopsis
-		Get triggers
+		Get trigger
 	.Description
-		Get triggers
+		Get trigger
 	.Parameter TriggerID
 		To filter by ID of the trigger
 	.Example
@@ -3086,7 +3127,9 @@ Function New-ZabbixTrigger {
 Function Get-ZabbixItem { 
 	<#
 	.Synopsis
-		Retrieves items
+		Retrieve items
+	.Description
+		Retrieve items
 	.Example
 		Get-ZabbixItem -HostId (Get-ZabbixHost | ? name -match hostName).hostid | select name,key_,lastvalue
 		Get Items for host (case insensitive)
@@ -4787,9 +4830,9 @@ Function Get-ZabbixApplication {
 Function Set-ZabbixApplication {
 	<# 
 	.Synopsis
-		Set applications
+		Set/Update application
 	.Description
-		Set applications
+		Set/Update application
 	.Example
 		Get-ZabbixTemplate | ? name -match "templateName" | Get-ZabbixApplication | ? name -match appName | Set-ZabbixApplication -Name newAppName
 		Rename application in the template
@@ -6020,6 +6063,9 @@ Function Get-ZabbixHostInventory {
 	.Example
 		Get-ZabbixHostInventory -HostName HostName1,HostName2 
 		Get full inventory for host (HostName is case sensitive)
+	.Example
+		Get-ZabbixHost | ? name -match host | ? inventory | Get-ZabbixHostInventory
+		Get hosts with inventory
 	.Example  
 		Get-ZabbixHostInventory HostName1,HostName2 | ? os | select name,os,tag | ft -a
 		Get inventory for hosts (HostName is case sensitive)

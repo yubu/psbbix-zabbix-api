@@ -110,7 +110,7 @@ Function New-ZabbixSession {
 	.Parameter PSCredential
 		Credential
 	.Parameter IPAddress
-		Accept IP adress or domain name
+		Accept IP address or domain name
 	.Parameter noSSL
 		Connect to Zabbix server with plain http
 	.Example
@@ -680,7 +680,7 @@ Function New-ZabbixHost {
 	.Parameter HostName
 		HostName of the host as it will appear in zabbix
 	.Parameter IP
-		IP adress of the host
+		IP address of the host
 	.Parameter DNSName
 		Domain name of the host
 	.Parameter Port
@@ -881,7 +881,7 @@ Function Remove-ZabbixHost {
 	.Parameter HostName
 		HostName of the host as it will display on zabbix
 	.Parameter IP
-		IP adress to supervise the host
+		IP address to supervise the host
 	.Parameter DNSName
 		Domain name to supervise the host
 	.Parameter Port
@@ -894,13 +894,13 @@ Function Remove-ZabbixHost {
 		If used, domain name of the host will used to contact it
 	.Example
 		Get-ZabbixHost -HostName SourceHost | Copy-ZabbixHost -HostName NewHost -IP 10.20.10.10
-		Full copy of the host with new Hostanme and IP
+		Full copy of the host with new Hostname and IP
 	.Example
 		Get-ZabbixHost | ? name -eq sourceHost | Copy-ZabbixHost -HostName NewHost -IP 10.20.10.10
-		Full clone of the host with new Hostanme and IP
+		Full clone of the host with new Hostname and IP
 	.Example
 		Get-ZabbixHost | ? name -eq SourceHost | Copy-ZabbixHost -HostName NewHost -IP 10.20.10.10 -status 1
-		Full clone of the host with new Hostanme and IP with status 1 (disabled)
+		Full clone of the host with new Hostname and IP with status 1 (disabled)
 	.Example
 		Import-Csv c:\new-servers.csv | %{Get-ZabbixHost | ? name -eq SourceHost | Clone-ZabbixHost -HostName $_.Hostname -IP $_.IP}
 		Mass clone new hosts
@@ -1914,7 +1914,7 @@ Function New-ZabbixMaintenance {
 		$hosts=Get-Zabbixhost | ? name -match "host|anotherhost"
 		$groups=(Get-ZabbixGroup | ? name -match "group")
 		New-ZabbixMaintenance -HostID $hosts.hostid -GroupID $groups.groupid -MaintenanceName "NewMaintenanceName" -ActiveSince (convertTo-epoch (convertTo-epoch ((get-date).addhours(0)).ToUniversalTime()) -ActiveTill (convertTo-epoch ((get-date).addhours(+4)).ToUniversalTime()) -TimeperiodPeriod (3*3600)
-		Create new maintenance for few hosts (time will be according current Zabbix server time). Maintenanace Active from now for 4 hours, and Period with duration of 3 hours, sarting immediately
+		Create new maintenance for few hosts (time will be according current Zabbix server time). Maintenance Active from now for 4 hours, and Period with duration of 3 hours, starting immediately
 	#>
 
 	[CmdletBinding()]
@@ -2061,13 +2061,13 @@ Function New-ZabbixMaintenance {
 		Maintenance timeperiod's period/duration (seconds)	
 	.Example
 		Get-ZabbixMaintenance -MaintenanceName 'MaintenanceName' | Set-ZabbixMaintenance -GroupID (Get-ZabbixHostGroup | ? name -eq 'HostGroupName').groupid -TimeperiodPeriod 44400 -HostID (Get-ZabbixHost | ? name -match host).hostid
-		Will replace ZbbixHostGroup, hosts and set new duration for selected maintenance (MaintenanceName is case sensitive)
+		Will replace ZabbixHostGroup, hosts and set new duration for selected maintenance (MaintenanceName is case sensitive)
 	.Example
 		Get-ZabbixMaintenance | ? name -eq 'MaintenanceName' | Set-ZabbixMaintenance -GroupID (Get-ZabbixHostGroup | ? name -match 'homeGroup').groupid -verbose -TimeperiodPeriod 44400 -HostID (Get-ZabbixHost | ? name -match host).hostid
 		Same as above (MaintenanceName is case insensitive)
 	.Example
 		Get-ZabbixMaintenance | ? name -match 'maintenance' | Set-ZabbixMaintenance -GroupID (Get-ZabbixHostGroup | ? name -match 'Name1|Name2').groupid -TimeperiodPeriod 44400 -HostID (Get-ZabbixHost | ? name -match host).hostid
-		Replace ZbbixHostGroups, hosts, duration in multiple maintenances 
+		Replace ZabbixHostGroups, hosts, duration in multiple maintenances 
 	#>
 
 	[CmdletBinding()]
@@ -2224,23 +2224,23 @@ Function New-ZabbixMaintenance {
 		Get-ZabbixHost | ? name -match host -pv hsts | Get-ZabbixHttpTest | select -ExpandProperty steps | select  @{n='Server';e={$hsts.host}},name,httpstepid,httptestid,no,url,timeout,required,status_codes,follow_redirects | ft -a
 		Get web/http tests for hostname match
 	.Example
-		Get-ZabbixHttpTest -HostID (Get-ZabbixHost | ? name -eq hostnname).hostid | ? name -match "httpTest" | fl httptestid,name,steps
-		Get web/http test for host by name (case insensitive), and filter web/hhtp test by test name match (case insensitive)
+		Get-ZabbixHttpTest -HostID (Get-ZabbixHost | ? name -eq hostname).hostid | ? name -match "httpTest" | fl httptestid,name,steps
+		Get web/http test for host by name (case insensitive), and filter web/http test by test name match (case insensitive)
 	.Example
-		Get-ZabbixHttpTest -HostID (Get-ZabbixHost | ? name -eq hostnname).hostid | ? name -match "httpTest" | select -ExpandProperty steps
-		Get web/http test for host by name (case insensitive), and filter web/hhtp test by test name match (case insensitive)
+		Get-ZabbixHttpTest -HostID (Get-ZabbixHost | ? name -eq hostname).hostid | ? name -match "httpTest" | select -ExpandProperty steps
+		Get web/http test for host by name (case insensitive), and filter web/http test by test name match (case insensitive)
 	.Example
-		Get-ZabbixHttpTest -HttpTestName SomeHTTPtest | select -Unique 
+		Get-ZabbixHttpTest -HttpTestName SomeHTTPTest | select -Unique 
 		Get web/http test by name (case sensitive)
 	.Example
 		Get-ZabbixHttpTest -HttpTestName HTTPTestName | select name,@{n="host";e={$_.hosts.host}}
 		Get web/http test by name (case sensitive) and hosts it is assigned to
 	.Example
-		(Get-ZabbixHttpTest | ? name -eq "HTTPtestName").hosts.host | sort
+		(Get-ZabbixHttpTest | ? name -eq "HTTPTestName").hosts.host | sort
 		Get hosts by web/http test's name (case insensitive)
 	.Example	
 		(Get-ZabbixHttpTest | ? name -eq "httpTestName").hosts.host | ? {$_ -notmatch "template"} | sort
-		Get only hosts by web/http test name, sorted (templates (not hosts) are sortrd out)
+		Get only hosts by web/http test name, sorted (templates (not hosts) are sorted out)
 	.Example
 		Get-ZabbixHttpTest | ? name -match httpTestName | select name, @{n="required";e={$_.steps.required}} -Unique
 		Get web/http test name and field required
@@ -2608,7 +2608,7 @@ Function Export-ZabbixConfiguration {
 		Export hosts configuration
 	.Example
 		Export-ZabbixConfig -HostID (Get-ZabbixHost | ? name -match host).hostid | clip
-		Capture to clipboard exported hosts configurarion
+		Capture to clipboard exported hosts configuration
 	.Example
 		Export-ZabbixConfig -HostID (Get-ZabbixHost | ? name -match host).hostid | Set-Content c:\zabbix-hosts-export.xml -Encoding UTF8 -nonewline
 		Export hosts configuration to xml file
@@ -2617,7 +2617,7 @@ Function Export-ZabbixConfiguration {
 		Export template to xml file
 	.Example
 		Export-ZabbixConfig -TemplateID (Get-ZabbixHost | ? name -match windows).templateid | Set-Content c:\zabbix-templates-export.xml -Encoding UTF8 -nonewline
-		Export template configuration linked to sertain hosts to xml file, -nonewline saves file in Unix format (no CR)
+		Export template configuration linked to certain hosts to xml file, -nonewline saves file in Unix format (no CR)
 	.Example
 		Export-ZabbixConfig -HostID (Get-ZabbixHost | ? name -eq host).hostid | format-xml | Set-Content C:\zabbix-host-export-formatted-pretty.xml -Encoding UTF8
 		Export host template to xml, beautify with Format-Xml (module pscx) and save to xml file
@@ -2625,7 +2625,7 @@ Function Export-ZabbixConfiguration {
 		Get-ZabbixHost | ? name -match host -pv hst | %{Export-ZabbixConfig -HostID $_.hostid | sc c:\ZabbixExport\export-zabbix-host-$($hst.name).xml -Encoding UTF8}
 		Export host configuration
 	.Example
-		Get-ZabbixHost | ? name -eq Host | Export-ZabbixConfig | Format-Xml | Set-Content C:\zabbix-host-exprt-formatted-pretty.xml -Encoding UTF8
+		Get-ZabbixHost | ? name -eq Host | Export-ZabbixConfig | Format-Xml | Set-Content C:\zabbix-host-export-formatted-pretty.xml -Encoding UTF8
 		Export host template to xml, beautify with Format-Xml (module pscx) and save to xml file
 	.Example
 		diff (Get-Content c:\FirstHost.xml) (Get-content c:\SecondHost.xml)
@@ -3431,7 +3431,7 @@ Function Get-ZabbixEvent {
 		Get Event
 	.Example
 		Get-ZabbixEvent -TimeFrom (convertTo-epoch (get-date).addhours(-24)) | select @{n="Time UTC";e={convertfrom-epoch $_.clock}},@{n="Server";e={$_.hosts.name}},@{n="alerts";e={$_.alerts.subject[0]}}
-		Get events for last 24 hours. acording UTC/GMT+0 time. TimeTill is now in UTC/GMT+0 time
+		Get events for last 24 hours. According UTC/GMT+0 time. TimeTill is now in UTC/GMT+0 time
 	.Example
 		Get-ZabbixEvent -TimeFrom (convertTo-epoch (get-date).addhours(-24)) -TimeTill (convertTo-epoch (get-date).addhours(0)) | select @{n="Time UTC";e={convertfrom-epoch $_.clock}},@{n="Server";e={$_.hosts.name}},@{n="alerts";e={$_.alerts.subject[0]}}
 		Get events for last 24 hours
@@ -3785,10 +3785,10 @@ Function Get-ZabbixUser {
 		Get users
 	.Example
 		Get-ZabbixUser | ? alias -match userName | select alias -ExpandProperty medias
-		Get user's meadias
+		Get user medias
 	.Example
 		Get-ZabbixUser | ? alias -match userName | select alias -ExpandProperty mediatypes
-		Get user's mediatypes
+		Get user mediatypes
 	.Example
 		Get-ZabbixUser | ? alias -match alias | select userid,alias,attempt_ip,@{n="attempt_clock(UTC)";e={convertfrom-epoch $_.attempt_clock}},@{n="usrgrps";e={$_.usrgrps.name}}
 		Get users
@@ -3931,7 +3931,7 @@ Function New-ZabbixUser {
 	.Parameter UserMediaPeriod
 		User media settings: Period. Example: "1-7,00:00-24:00"
 	.Parameter UserMediaSendto
-		User media settings: SendTo. Mmostly email address
+		User media settings: SendTo. Mostly email address
 	.Parameter UserMediaActive
 		User media settings: Active. User media enabled=0/disabled=1
 	.Parameter mediatypeid
@@ -4142,7 +4142,7 @@ Function Set-ZabbixUser {
 	.Parameter UserMediaPeriod
 		User media settings: Period. Example: "1-7,00:00-24:00"
 	.Parameter UserMediaSendto
-		User media settings: SendTo. Mmostly email address
+		User media settings: SendTo. Mostly email address
 	.Parameter UserMediaActive
 		User media settings: Active. User media enabled=0/disabled=1
 	.Parameter mediatypeid
@@ -4181,7 +4181,7 @@ Function Set-ZabbixUser {
 		Get-ZabbixMediaType | select mediatypeid,type,description,status
 		Get list of media types
 		Get-ZabbixUser | ? alias -eq first.last | Set-Zabbixuser -UserMediaSendto new.email@example.com -UserMediaActive 0 -UserMediaSeverity 63 -mediatypeid 1 -UserGroupID 8,12
-		Set user media properties (user email address, severity, enbaled=0/disabled=1) for mediatypeid 1 (Email) and assign user to the user groups with ids 8 and 12
+		Set user media properties (user email address, severity, enabled=0/disabled=1) for mediatypeid 1 (Email) and assign user to the user groups with ids 8 and 12
 	.Example
 		Get-ZabbixUser | ? alias -eq first.last | Set-ZabbixUser -matchMediatypeids "8|4" -UserMediaSendto first.last@domain.com -UserMediaSeverity 62
 		Set multiple medias (8 and 4) for one user
@@ -4246,7 +4246,7 @@ Function Set-ZabbixUser {
 
 		if ($Autologin -and $Autologout) {Write-Host "`nAutologin and Autologout options cannot be enabled together!`n" -f red; return}
 		if (!($matchMediatypeids -or $mediatypeid) -and ($UserMediaActive -or $UserMediaSendto -or $UserMediaSeverity -or $UserMediaPeriod)) {
-			Write-Host "`n`nERROR: Missing paramemters!`n`nFor single mediatypeid use -mediatypeid`nFor multiple mediatypeids use -matchMediatypeids" -f red
+			Write-Host "`n`nERROR: Missing parameters!`n`nFor single mediatypeid use -mediatypeid`nFor multiple mediatypeids use -matchMediatypeids" -f red
 			Write-Host "`nHelp: gzh user -p mediatypeid`n`n" -f cyan
 			return
 		}  
@@ -4676,7 +4676,7 @@ Function Get-ZabbixHistory {
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$HostID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$ItemID,
 		#epoch time
-		#TimeFrom to display the history. Default: -48, form 48 hurs ago. Time is in UTC/GMT+0
+		#TimeFrom to display the history. Default: -48, form 48 hours ago. Time is in UTC/GMT+0
 		$TimeFrom=(convertTo-epoch ((get-date).addhours(-48)).ToUniversalTime()),
 		#epoch time
 		#TimeTil to display the history. Default: till now. Time is in UTC/GMT+0
@@ -5223,7 +5223,7 @@ Function New-ZabbixHostInterface {
 		Get-ZabbixHost | ? name -match hostname | Get-ZabbixHostInterface | ? port -match 31021 | ft -a
 		Get-ZabbixHost | ? name -match hostname | select hostid,name,@{n="ip";e={$_.interfaces.ip[0]}} | New-ZabbixHostInterface -Port 31001 -type 4 -main 1 -verbose
 		Get-ZabbixHost | ? name -match hostname | Get-ZabbixHostInterface | ft -a
-		Manually add new teplate for created interface 
+		Manually add new template for created interface 
 		Run the checks: 
 		Get-ZabbixHost | ? name -match hostname | select name,*error* | ft -a
 		Get-ZabbixHost | ? name -match hostname | select name,*jmx* | ft -a
@@ -5592,9 +5592,9 @@ Function Save-ZabbixGraph {
 		Save and show graphs for single host
 	.Example
 		(Get-ZabbixGraph -HostID (Get-ZabbixHost | ? name -match "multipleHosts").hostid | ? name -match 'RAM utilization | CPU utilization').graphid | %{Save-ZabbixGraph -GraphID $_ -sTime (convertto-epoch (get-date -date "05/25/2015 00:00")) -verbose -show}
-		Save multiple grpahs for multiple hosts
+		Save multiple graphs for multiple hosts
 	.Example
-		(Get-ZabbixGraph -HostID (Get-ZabbixHost | ? name -match "multipleHosts").hostid | ? name -match 'RAM utilization | CPU utilization').graphid | %{Save-ZabbixGraph -GraphID $_ -sTime (convertto-epoch (get-date -date "05/25/2015 00:00")) -show -mail -from "zabbix@domain.com" -to first.last@mail.com -smtpserver 10.10.20.10 -proprity High}
+		(Get-ZabbixGraph -HostID (Get-ZabbixHost | ? name -match "multipleHosts").hostid | ? name -match 'RAM utilization | CPU utilization').graphid | %{Save-ZabbixGraph -GraphID $_ -sTime (convertto-epoch (get-date -date "05/25/2015 00:00")) -show -mail -from "zabbix@domain.com" -to first.last@mail.com -smtpserver 10.10.20.10 -priority High}
 		Save and send by email multiple graphs, for multiple hosts
     #>
     
@@ -5627,7 +5627,7 @@ Function Save-ZabbixGraph {
         if (!(test-path $psbbixTmpDir)) {mkdir $psbbixTmpDir}
         $fileFullPath="$psbbixTmpDir\graph-$graphid.png"
     }
-	write-verbose "Graph files locateted here: $psbbixTmpDir"
+	write-verbose "Graph files located here: $psbbixTmpDir"
 	write-verbose "Full path: $fileFullPath"
 	
 	if ($noSSL) {
@@ -5747,7 +5747,7 @@ Function New-ZabbixMediaType {
 			ExecScriptParams="{ALERT.SENDTO}\n{ALERT.SUBJECT}\n{ALERT.MESSAGE}\n"
 		}
 		New-ZabbixMediaType @PushMediaTypeCreateParams 
-		Create new meadia type with cystom options	
+		Create new media type with custom options	
 	.Example
 		Get-ZabbixMediaType | ? descr* -eq EmailMediaType | New-ZabbixMediaType -Description "DisabledCopyOfEmailMediaType" -status 1
 		Copy/Clone existing media type to new one, and disable it
@@ -5770,9 +5770,9 @@ Function New-ZabbixMediaType {
 		[Alias("smtp_authentication")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$SMTPServerAuthentication,
 		# SMTP server connection security. Possible values: 0 - (default) disabled; 1 - StartTLS; 2 - SSL/TLS
 		[Alias("smtp_security")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$SMTPServerConnectionSecurity,
-		# SMTP server connection security. Possible values: 0 - (default) disabled; 1 - dnabled
+		# SMTP server connection security. Possible values: 0 - (default) disabled; 1 - enabled
 		[Alias("smtp_verify_peer")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$SMTPServerConnectionSecurityVerifyPeer,
-		# SMTP server connection security. Possible values: 0 - (default) disabled; 1 - dnabled
+		# SMTP server connection security. Possible values: 0 - (default) disabled; 1 - enabled
 		[Alias("smtp_verify_host")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$SMTPServerConnectionSecurityVerifyHost,
 		# Whether the media type is enabled. Possible values: 0 - (default) enabled; 1 - disabled.
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$status,
@@ -5855,10 +5855,10 @@ Function Set-ZabbixMediaType {
 	.Description
 		Set media types
 	.Example
-		Get-ZabbixMediatype | ? name -eq EmailMediaType-01 | Set-ZbbixMediaType -status 1
+		Get-ZabbixMediatype | ? name -eq EmailMediaType-01 | Set-ZabbixMediaType -status 1
 		Disable the media type
 	.Example
-		Get-ZabbixMediatype | ? name -like *email* | Set-ZbbixMediaType -AlertSendRetryInterval "7s" -EmailAddressFrom "zabbix-02@example.com"
+		Get-ZabbixMediatype | ? name -like *email* | Set-ZabbixMediaType -AlertSendRetryInterval "7s" -EmailAddressFrom "zabbix-02@example.com"
 		Update all media types, contain "email" in the description field
 	.Example
 		$EmailMediaTypeCreateParams=@{
@@ -5914,9 +5914,9 @@ Function Set-ZabbixMediaType {
 		[Alias("smtp_authentication")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$SMTPServerAuthentication,
 		# SMTP server connection security. Possible values: 0 - (default) disabled; 1 - StartTLS; 2 - SSL/TLS
 		[Alias("smtp_security")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$SMTPServerConnectionSecurity,
-		# SMTP server connection security. Possible values: 0 - (default) disabled; 1 - dnabled
+		# SMTP server connection security. Possible values: 0 - (default) disabled; 1 - enabled
 		[Alias("smtp_verify_peer")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$SMTPServerConnectionSecurityVerifyPeer,
-		# SMTP server connection security. Possible values: 0 - (default) disabled; 1 - dnabled
+		# SMTP server connection security. Possible values: 0 - (default) disabled; 1 - enabled
 		[Alias("smtp_verify_host")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$SMTPServerConnectionSecurityVerifyHost,
 		# Whether the media type is enabled. Possible values: 0 - (default) enabled; 1 - disabled.
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$status,
@@ -6006,7 +6006,7 @@ Function Remove-ZabbixMediaType {
 		Get-ZabbixMediaType | ? descr* -match MediatypeToDelete | Remove-ZabbixMediaType
 		Remove media types
 	.Example
-		Delete-ZabbixMediaType -mediatypeid (Get-ZabbixMediaType | ? descr* -match MediTypeToDelete-0[1-3]).mediatypeid
+		Delete-ZabbixMediaType -mediatypeid (Get-ZabbixMediaType | ? descr* -match MediaTypeToDelete-0[1-3]).mediatypeid
 		Delete media types
 	#>
 	[cmdletbinding(SupportsShouldProcess,ConfirmImpact='High')]
@@ -6178,7 +6178,7 @@ Function Set-ZabbixHostInventory {
 		Get-ZabbixHostInventory | ? inventory_mode -eq 0 | select hostid,@{n='hostname';e={(Get-ZabbixHost -HostID $_.hostid).host}},inventory_mode,name | ft -a
 		Get inventory enabled hosts
 	.Example
-		Get-ZabbixHostInventory -HostName Hostanme1,Hostname2 | Set-ZabbixHostInventory HostName1,HostName2 -OSFullName "OSFullName"
+		Get-ZabbixHostInventory -HostName Hostname1,Hostname2 | Set-ZabbixHostInventory HostName1,HostName2 -OSFullName "OSFullName"
 		Set inventory
 	.Example
 		Get-ZabbixHost | ? name -match "host-0[5-9]" | Set-ZabbixHostInventory -OSFullName "OSFullName"
@@ -6188,7 +6188,7 @@ Function Set-ZabbixHostInventory {
 		Set inventory for host, which inventory entry name is NameInInventory 
 	.Example
 		Get-ZabbixHostInventory | select @{n='hostname';e={(Get-ZabbixHost -HostID $_.hostid).host}},* | ? hostname -match "host" | Set-ZabbixHostInventory -OSFullName "-OSFullName"
-		Set invenory entry for multiple hosts
+		Set inventory entry for multiple hosts
 	.Example
 		Get-ZabbixHostInventory | ? name -match host | Set-ZabbixHostInventory -OSName " "
 		Delete inventory entry

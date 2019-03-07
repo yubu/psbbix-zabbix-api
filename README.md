@@ -20,7 +20,6 @@ Powershell Module for Zabbix API
 ### Warning:
 - Be careful. Especially with the mass delete and the mass update. 
 - Bugs happen. Use on your own risk.
-- Breaking change: cmdlets Get-ZabbixGroup and Set-ZabbixGroup were renamed to Get-ZabbixHostGroup and Set-ZabbixHostGroup. The old cmdlets will continue to work, thank to aliases. But will be depricated in the future.
 
 ### Experimental:
 Get-ZabbixHostInventory
@@ -198,7 +197,7 @@ New-ZabbixMaintenance -HostID (Get-ZabbixHost | ? name -match otherhost).hostid 
 ##### Remove-ZabbixMaintenance
 ```powershell
 Remove-ZabbixMaintenance -MaintenanceID "3","4" 
-Get-ZabbixMaintenance | ? name -match "Maint" | Remove-ZabbixMaintenance -WhatIf
+Get-ZabbixMaintenance | ? name -match "MaintenanceName" | Remove-ZabbixMaintenance -WhatIf
 ```
 
 ##### Export-ZabbixConfig

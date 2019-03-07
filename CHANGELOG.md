@@ -2,7 +2,7 @@
 ##### [0.2.0-alpha.4] - 2019-02-28
 ##### Breaking change
 - cmdlets Get-ZabbixGroup and Set-ZabbixGroup were renamed to Get-ZabbixHostGroup and Set-ZabbixHostGroup
-- However old Get-ZabbixGroup and Set-ZabbixGroup will continue to work, thank to aliases. But they will be depricated in the future
+
 ##### Fixed
 - Get-ZabbixUser
 - Get-ZabbixUserGroup
@@ -13,25 +13,25 @@
 ```powershell
 New-ZabbixUserGroup
 Set-ZabbixUserGroup
-Remove-ZabixUserGroup
+Remove-ZabbixUserGroup
 ``` 
 
 ##### [0.2.0-alpha.3] - 2019-02-11
 ##### Breaking change
 - cmdlets Get-ZabbixGroup and Set-ZabbixGroup were renamed to Get-ZabbixHostGroup and Set-ZabbixHostGroup
-- However old Get-ZabbixGroup and Set-ZabbixGroup will continue to work, thank to aliases. But they will be depricated in the future
+- However old Get-ZabbixGroup and Set-ZabbixGroup will continue to work, thank to aliases. But they will be deprecated in the future
 ##### Fixed
 - A lot of minor things
 
 ##### Added
 ```powershell
 Get-ZabbixHostInventory (experimental)
-Set-ZabixHostInventory (experimental)
+Set-ZabbixHostInventory (experimental)
 ``` 
 ##### [0.2.0-alpha.2] - 2019-02-05
 ##### Breaking change
 - cmdlets Get-ZabbixGroup and Set-ZabbixGroup were renamed to Get-ZabbixHostGroup and Set-ZabbixHostGroup
-- However old Get-ZabbixGroup and Set-ZabbixGroup will continue to work, thank to aliases. But they will be depricated in the future
+- However old Get-ZabbixGroup and Set-ZabbixGroup will continue to work, thank to aliases. But they will be deprecated in the future
 ##### Fixed
 - Removed annoying splatting parameter: @zabSessionParams. The parameter still exist, and can be used, if needed
 - Connect-Zabbix

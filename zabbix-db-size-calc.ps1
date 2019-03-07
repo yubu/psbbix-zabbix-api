@@ -1,10 +1,10 @@
 #Zabbix DB Size calculator
 #https://www.zabbix.com/documentation/2.4/manual/installation/requirements#database_size
-function Get-zabbixDBsize {
+function Get-ZabbixDBSize {
 	param ($items, $history, $refreshRate=60, $trendsYears=3, $valuesPerSec)
 	
 	if (!$psboundparameters.count) {
-		write-host "Example: get-zabbixDBsize -items 11284 -history 30 -trendsYears 3 -valuesPerSec 250" -f yellow
+		write-host "Example: Get-ZabbixDBSize -items 11284 -history 30 -trendsYears 3 -valuesPerSec 250" -f yellow
 		write-host "Note1: The following values obtained from Zabbix Dashboard: Status of Zabbix: items, valuesPerSec" -f green
 		write-host "Note2: The following values obtained from Templates: history and trends years" -f green
 		return
@@ -28,7 +28,7 @@ function Get-zabbixDBsize {
 	$historyDiskSpaceGB=$totalValues*50/1000000000
 	$historyDiskSpaceMB=$totalValues*50/1000000
 	#Housekeeper setting for trends:
-	#Zabbix keeps a 1-hour max/min/avg/count set of values for each item in the table trends. The data is used for trending and long period graphs. The one hour period can not be customised. 
+	#Zabbix keeps a 1-hour max/min/avg/count set of values for each item in the table trends. The data is used for trending and long period graphs. The one hour period can not be customized. 
 	#Zabbix database, depending on database type, requires about 128 bytes per each total. Suppose we would like to keep trend data for 5 years. Values for 3000 items will require 3000*24*365* 128 = 3.4GB per year, or 16.8GB for 5 years.
 	#days*(items/3600)*24*3600*bytes
 	#items : number of items

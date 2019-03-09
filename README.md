@@ -329,4 +329,3 @@ Get-ZabbixHttpTest -HttpTestName httpTest | Set-ZabbixHttpTest -status 1
 Remove-ZabbixHttpTest -HttpTestID (Get-ZabbixTemplate | ? name -eq "Template Name" | Get-ZabbixHttpTest | ? name -match httpTests).httptestid
 ## delete http tests
 ```
- 

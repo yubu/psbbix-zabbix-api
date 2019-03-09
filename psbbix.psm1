@@ -38,6 +38,12 @@ function Remove-EmptyLines {
 	}
 }
 
+Function Write-MissingParamsMessage {
+	Write-Host "`nMissing parameters!`n" -f red
+	sleep 1
+	Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines
+}
+
 Function Get-ZabbixHelp {
 	<# 
 	.Synopsis
@@ -414,7 +420,7 @@ Function Get-ZabbixHost {
 	process {
 
 		if (!(Get-ZabbixSession)) {return}
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		# if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -585,11 +591,11 @@ Function Set-ZabbixHost {
 		# Host inventory population mode: Possible values are: -1 - disabled; 0 - (default) manual; 1 - automatic.
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$InventoryMode,
 		# IPMI authentication algorithm: Possible values are: -1 - (default) default; 0 - none; 1 - MD2; 2 - MD5; 4 - straight; 5 - OEM; 6 - RMCP+
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$IpmiAuthtype,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$IpmiUsername,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$IpmiPassword,
+		[Alias("ipmi_authtype")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$IpmiAuthtype,
+		[Alias("ipmi_username")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$IpmiUsername,
+		[Alias("ipmi_password")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$IpmiPassword,
 		# IPMI privilege level: Possible values are: 1 - callback; 2 - (default) user; 3 - operator; 4 - admin; 5 - OEM.
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$IpmiPrivilege,
+		[Alias("ipmi_privilege")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$IpmiPrivilege,
 		# [array]$GroupID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$HttpTestID,
 		# Status and function of the host: Possible values are: 0 - (default) monitored host; 1 - unmonitored host
@@ -605,8 +611,8 @@ Function Set-ZabbixHost {
     
 	process {
 		
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -719,6 +725,9 @@ Function New-ZabbixHost {
 		New-ZabbixHost -HostName NewHost -IP 10.20.10.10 -GroupID (Get-ZabbixHost | ? name -eq "SourceHost").groups.groupid -TemplateID (Get-ZabbixHost | ? name -eq "SourceHost" | Get-ZabbixTemplate | ? name -match os).templateid -status 1 -verbose 
 		Clone HostGroups and Templates from other host
 	.Example
+		Get-ZabbixHost | ? name -match SourceHost | New-ZabbixHost -HostName NewHost -IP 10.20.10.10 -status 1
+		Partially clone host (templates and groups will be copied from the source host)
+	.Example
 		Get-ZabbixHost | ? name -eq SourceHost | Get-ZabbixApplication | New-ZabbixApplication -HostID (Get-ZabbixHost | ? name -match newHost).hostid
 		Clone Application(s) from host to host
 	#>
@@ -730,25 +739,26 @@ Function New-ZabbixHost {
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][string]$IP,
 		[string]$DNSName,
 		[Switch]$MonitorByDNSName,
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Port = 10050,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][string]$status,
-		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$true)][array]$GroupID,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$groups,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][int]$ProxyHostID,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$templates,
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$false)][array]$interfaces,
-		# [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$Interfaces,
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session=($global:zabSessionParams.session),
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id=($global:zabSessionParams.id),
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL=($global:zabSessionParams.url)
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Port = 10050,
+		[Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)][string]$status,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][array]$GroupID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$groups,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][array]$TemplateID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][int]$ProxyHostID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$templates,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][array]$interfaces,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$parentTemplates,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$session=($global:zabSessionParams.session),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$id=($global:zabSessionParams.id),
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$URL=($global:zabSessionParams.url)
     )
 
     process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
+		# if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -782,8 +792,8 @@ Function New-ZabbixHost {
 			id = $id
 		}
 
-		if ($GroupID) {$Body.params.groups=$grp}
-		if ($TemplateID) {$Body.params.templates=$tmpl}
+		if ($GroupID) {$Body.params.groups=$grp} elseif ($groups) {$Body.params.groups=$groups}
+		if ($TemplateID -and ($TemplateID -ne 0)) {$Body.params.templates=$tmpl} elseif ($parentTemplates) {$Body.params.templates=$parentTemplates | select templateid}
 
 		$BodyJSON = ConvertTo-Json $Body -Depth 3
 		write-verbose $BodyJSON
@@ -846,8 +856,8 @@ Function Remove-ZabbixHost {
 	
     process {
 		
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -875,9 +885,9 @@ Function Remove-ZabbixHost {
  Function Copy-ZabbixHost {
 	<# 
 	.Synopsis
-		Create new host to monitor from zabbix server
+		Copy/clone host
 	.Description
-		Create new host to monitor from zabbix server
+		Copy/clone host
 	.Parameter HostName
 		HostName of the host as it will display on zabbix
 	.Parameter IP
@@ -928,9 +938,9 @@ Function Remove-ZabbixHost {
     )
 
 	process {
-
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		
+		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -1018,7 +1028,6 @@ Function Get-ZabbixTemplate {
    
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
@@ -1117,8 +1126,8 @@ Function New-ZabbixTemplate {
 	
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -1221,8 +1230,8 @@ Function Set-ZabbixTemplate {
     
 	process {
 		
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -1289,8 +1298,8 @@ Function Remove-ZabbixTemplate {
     
 	process {
 		
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -1360,8 +1369,7 @@ Function Get-ZabbixHostGroup {
 
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -1430,8 +1438,8 @@ Function Set-ZabbixHostGroup {
     
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -1477,6 +1485,7 @@ Function New-ZabbixHostGroup {
 	#>
     
 	[CmdletBinding()]
+	[Alias("nzhg")]
 	Param (
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Name,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
@@ -1487,8 +1496,8 @@ Function New-ZabbixHostGroup {
     
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -1531,6 +1540,7 @@ Function Remove-ZabbixHostGroup {
 	#>
     
 	[CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
+	[Alias("rzhg")]
 	Param (
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Name,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$GroupID,
@@ -1542,8 +1552,8 @@ Function Remove-ZabbixHostGroup {
     
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -1599,6 +1609,7 @@ Function Set-ZabbixHostGroupRemoveHosts {
 	#>
     
 	[CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
+	[Alias("szhgrh")]
 	Param (
         [Alias("name")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$GroupName,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$GroupID,
@@ -1612,8 +1623,8 @@ Function Set-ZabbixHostGroupRemoveHosts {
     
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -1670,6 +1681,7 @@ Function Set-ZabbixHostGroupAddHosts {
 	#>
     
 	[CmdletBinding()]
+	[Alias("szhgah")]
 	Param (
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Name,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$GroupID,
@@ -1683,8 +1695,8 @@ Function Set-ZabbixHostGroupAddHosts {
     
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -1779,7 +1791,6 @@ Function Get-ZabbixMaintenance {
     
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
@@ -1851,8 +1862,8 @@ Function Remove-ZabbixMaintenance {
      
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -1961,8 +1972,8 @@ Function New-ZabbixMaintenance {
     
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -2119,8 +2130,8 @@ Function New-ZabbixMaintenance {
     
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -2264,7 +2275,6 @@ Function New-ZabbixMaintenance {
 
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
@@ -2373,8 +2383,8 @@ Function New-ZabbixHttpTest {
 
 	process {
 	
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -2476,8 +2486,8 @@ Function Set-ZabbixHttpTest {
 	
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -2562,8 +2572,8 @@ Function Remove-ZabbixHttpTest {
 	
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -2656,8 +2666,8 @@ Function Export-ZabbixConfiguration {
 	
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"	
@@ -2810,8 +2820,8 @@ function Import-ZabbixConfiguration {
 	)
 	
 	Process {
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"	
@@ -2944,7 +2954,6 @@ Function Get-ZabbixTrigger {
 	
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
@@ -3025,8 +3034,8 @@ Function Set-ZabbixTrigger {
 	
 	process {
 		
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -3091,8 +3100,8 @@ Function New-ZabbixTrigger {
 	
 	process {
 		
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -3217,8 +3226,8 @@ Function Get-ZabbixItem {
 	
 	process {
 
-		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -3307,8 +3316,8 @@ Function Set-ZabbixItem {
     
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -3378,8 +3387,8 @@ Function Remove-ZabbixItem {
     
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -3467,8 +3476,7 @@ Function Get-ZabbixEvent {
 	
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -3538,8 +3546,8 @@ Function Set-ZabbixEvent {
 	
 	process {
 		
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -3621,7 +3629,6 @@ Function Get-ZabbixAlert {
 
 	process {
 
-		if (!$psboundparameters.count  -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
@@ -3688,7 +3695,6 @@ Function Get-ZabbixAction {
 	
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
@@ -3746,8 +3752,8 @@ Function Set-ZabbixAction {
 	
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -3812,7 +3818,6 @@ Function Get-ZabbixUser {
 	
 	process {
 	
-		# if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
 		
 		$boundparams=$PSBoundParameters | out-string
@@ -3882,8 +3887,8 @@ Function Remove-ZabbixUser {
 	
 	process {
 
-		if (!$psboundparameters.count  -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -4023,8 +4028,8 @@ Function New-ZabbixUser {
 	
 	process {
 		
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -4238,8 +4243,8 @@ Function Set-ZabbixUser {
 	
 	process {
 		
-		if (!$psboundparameters.count) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -4352,7 +4357,6 @@ Function Get-ZabbixUserGroup {
 	
 	process {
 		
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
@@ -4449,8 +4453,8 @@ Function New-ZabbixUserGroup {
 	
 	process {
 		
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -4550,8 +4554,8 @@ Function Set-ZabbixUserGroup {
 	
 	process {
 		
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -4619,8 +4623,8 @@ Function Remove-ZabbixUserGroup {
 	
 	process {
 
-		if (!$psboundparameters.count  -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -4695,8 +4699,7 @@ Function Get-ZabbixHistory {
 
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -4786,7 +4789,6 @@ Function Get-ZabbixApplication {
     
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
@@ -4853,8 +4855,8 @@ Function Set-ZabbixApplication {
     
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -4907,8 +4909,8 @@ Function Remove-ZabbixApplication {
     
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -4971,8 +4973,9 @@ Function New-ZabbixApplication {
     
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
+		
 		If (!$HostID -and !$TemplateID) {write-host "`nHostID or TemplateID is required.`n" -f red; Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; break}
 
 		$boundparams=$PSBoundParameters | out-string
@@ -5053,7 +5056,6 @@ Function Get-ZabbixHostInterface {
 	
 	process {
 		
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
@@ -5143,8 +5145,8 @@ Function Set-ZabbixHostInterface {
 	
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 		
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -5252,8 +5254,8 @@ Function New-ZabbixHostInterface {
 	
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -5313,8 +5315,8 @@ Function Remove-ZabbixHostInterface {
 	
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -5389,8 +5391,7 @@ Function Get-ZabbixScreen {
     
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixsession)) {return}
+		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -5446,8 +5447,7 @@ Function Get-ZabbixProblem {
 	
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-		if (!(get-zabbixSession)) {return}
+		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -5528,7 +5528,6 @@ Function Get-ZabbixGraph {
 	
 	process {
 		
-		if (!$psboundparameters.count  -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
 
 		$boundparams=$PSBoundParameters | out-string
@@ -5616,8 +5615,9 @@ Function Save-ZabbixGraph {
         [string]$priority,
         [string]$body
 	)
-	if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
-	if (!(get-zabbixsession)) {return}
+
+	if (!(Get-ZabbixSession)) {return}
+	elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 	$boundparams=$PSBoundParameters | out-string
 	write-verbose "($boundparams)"
@@ -5683,7 +5683,6 @@ Function Get-ZabbixMediaType {
 	
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
 		
 		$boundparams=$PSBoundParameters | out-string
@@ -5801,8 +5800,8 @@ Function New-ZabbixMediaType {
 	
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 		
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -5945,8 +5944,8 @@ Function Set-ZabbixMediaType {
 	
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 		
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -6021,8 +6020,8 @@ Function Remove-ZabbixMediaType {
 	
 	process {
 
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 		if (!(Get-ZabbixSession)) {return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 		
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -6119,7 +6118,6 @@ Function Get-ZabbixHostInventory {
 	process {
 
 		if (!(Get-ZabbixSession)) {return}
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"
@@ -6314,7 +6312,7 @@ Function Set-ZabbixHostInventory {
 	process {
 
 		if (!(Get-ZabbixSession)) {return}
-		if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+		elseif (!$psboundparameters.count) {Write-MissingParamsMessage; return}
 
 		$boundparams=$PSBoundParameters | out-string
 		write-verbose "($boundparams)"

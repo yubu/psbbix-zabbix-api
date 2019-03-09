@@ -1,4 +1,11 @@
 # Changelog
+##### [0.2.0-alpha.5] - 2019-03-09
+##### Breaking change
+- cmdlets Get-ZabbixGroup and Set-ZabbixGroup were renamed to Get-ZabbixHostGroup and Set-ZabbixHostGroup
+
+##### Fixed
+- Mostly grammar and validation stuff
+
 ##### [0.2.0-alpha.4] - 2019-02-28
 ##### Breaking change
 - cmdlets Get-ZabbixGroup and Set-ZabbixGroup were renamed to Get-ZabbixHostGroup and Set-ZabbixHostGroup

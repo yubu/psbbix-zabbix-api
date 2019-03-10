@@ -55,11 +55,11 @@ git clone https://github.com/yubu/psbbix.git
 Import-Module c:\temp\psbbix\psbbix.psm1
 ```
 ### Installation from Powershell Gallery 
-### (Not in Gallery yet!)
     Install-Module psbbix
 
 ### Installation from Powershell Gallery prerelease version
-    Install-Module psbbix -AllowPrerelease
+#### 0.2.0-alpha.5 is available in the Gallery
+    Install-Module psbbix -AllowPrerelease -AllowClobber
 
 ### Getting Started
 ##### Use powershell help to get commands and examples

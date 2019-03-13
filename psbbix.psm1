@@ -180,14 +180,18 @@ Function New-ZabbixSession {
     }
     catch {
         [void]::$_
-        write-host "Seems SSL certificate is self signed. Trying with no SSL validation..." -f yellow
-    } 
-    finally {
-        if (($PSVersionTable.PSEdition -eq "core") -and !($PSDefaultParameterValues.keys -eq "Invoke-RestMethod:SkipCertificateCheck")) {$PSDefaultParameterValues.Add("Invoke-RestMethod:SkipCertificateCheck",$true)}
+		write-host "Seems SSL certificate is self signed. Trying with no SSL validation..." -f yellow
+		if (($PSVersionTable.PSEdition -eq "core") -and !($PSDefaultParameterValues.keys -eq "Invoke-RestMethod:SkipCertificateCheck")) {$PSDefaultParameterValues.Add("Invoke-RestMethod:SkipCertificateCheck",$true)}
 		else {[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}}
         $global:zabSession=Invoke-RestMethod ("$URL/api_jsonrpc.php") -ContentType "application/json" -Body $BodyJSON -Method Post |
 			Select-Object jsonrpc,@{Name="session";Expression={$_.Result}},id,@{Name="URL";Expression={$URL}}
-    }	
+    } 
+    # finally {
+    #     if (($PSVersionTable.PSEdition -eq "core") -and !($PSDefaultParameterValues.keys -eq "Invoke-RestMethod:SkipCertificateCheck")) {$PSDefaultParameterValues.Add("Invoke-RestMethod:SkipCertificateCheck",$true)}
+	# 	else {[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}}
+    #     $global:zabSession=Invoke-RestMethod ("$URL/api_jsonrpc.php") -ContentType "application/json" -Body $BodyJSON -Method Post |
+	# 		Select-Object jsonrpc,@{Name="session";Expression={$_.Result}},id,@{Name="URL";Expression={$URL}}
+    # }	
 	
     if ($zabSession.session) {
 		$global:zabSessionParams = [ordered]@{jsonrpc=$zabSession.jsonrpc;session=$zabSession.session;id=$zabSession.id;url=$zabSession.URL}

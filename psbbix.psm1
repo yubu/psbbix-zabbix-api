@@ -131,14 +131,18 @@ Function New-ZabbixSession {
 	.Example
 		Connect-Zabbix -User admin -Password zabbix -IPAddress zabbix.domain.net
 		Connect to Zabbix server
+	.Example
+		Connect-Zabbix -IPAddress zabbix.domain.net -$URLCustomPath ""
+		Connect to Zabbix server with custom frontend install https://zabbix.domain.net, instead of default https://zabbix.domain.net/zabbix
 	#>
     
 	[CmdletBinding()]
     [Alias("Connect-Zabbix","czab")]
 	Param (
         [Parameter(Mandatory=$True)][string]$IPAddress,
-        [Parameter(Mandatory=$True)][PSCredential]$PSCredential,
-        [Switch]$UseSSL,
+		[Parameter(Mandatory=$True)][PSCredential]$PSCredential,
+		[Parameter(Mandatory=$False)]$URLCustomPath="zabbix",
+        [Switch]$useSSL,
 		[switch]$noSSL
     )
     
@@ -172,26 +176,25 @@ Function New-ZabbixSession {
 		$Protocol="https"
 	}
 	
-    $URL = $Protocol+"://$IPAddress/zabbix"
-    try {if (!$global:zabSession) {
+    # $URL = $Protocol+"://$IPAddress/zabbix"
+    $URL = $Protocol+"://$IPAddress/$URLCustomPath"
+    try {
+		if (!$global:zabSession -or !$global:zabSession.session) {
 		$global:zabSession=Invoke-RestMethod ("$URL/api_jsonrpc.php") -ContentType "application/json" -Body $BodyJSON -Method Post |
 			Select-Object jsonrpc,@{Name="session";Expression={$_.Result}},id,@{Name="URL";Expression={$URL}}
 	   }
     }
     catch {
-        [void]::$_
-		write-host "Seems SSL certificate is self signed. Trying with no SSL validation..." -f yellow
-		if (($PSVersionTable.PSEdition -eq "core") -and !($PSDefaultParameterValues.keys -eq "Invoke-RestMethod:SkipCertificateCheck")) {$PSDefaultParameterValues.Add("Invoke-RestMethod:SkipCertificateCheck",$true)}
-		else {[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}}
-        $global:zabSession=Invoke-RestMethod ("$URL/api_jsonrpc.php") -ContentType "application/json" -Body $BodyJSON -Method Post |
-			Select-Object jsonrpc,@{Name="session";Expression={$_.Result}},id,@{Name="URL";Expression={$URL}}
+		# [void]::$_
+		if ($_.exception -match "Unable to connect to the remote server") {write-host "`nNot connected! ERROR: $_`n" -f red; write-verbose $_.exception; return}
+		else { 
+			write-host "Seems SSL certificate is self signed. Trying with no SSL validation..." -f yellow
+			if (($PSVersionTable.PSEdition -eq "core") -and !($PSDefaultParameterValues.keys -eq "Invoke-RestMethod:SkipCertificateCheck")) {$PSDefaultParameterValues.Add("Invoke-RestMethod:SkipCertificateCheck",$true)}
+			else {[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}}
+			$global:zabSession=Invoke-RestMethod ("$URL/api_jsonrpc.php") -ContentType "application/json" -Body $BodyJSON -Method Post |
+				Select-Object jsonrpc,@{Name="session";Expression={$_.Result}},id,@{Name="URL";Expression={$URL}}
+		}
     } 
-    # finally {
-    #     if (($PSVersionTable.PSEdition -eq "core") -and !($PSDefaultParameterValues.keys -eq "Invoke-RestMethod:SkipCertificateCheck")) {$PSDefaultParameterValues.Add("Invoke-RestMethod:SkipCertificateCheck",$true)}
-	# 	else {[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}}
-    #     $global:zabSession=Invoke-RestMethod ("$URL/api_jsonrpc.php") -ContentType "application/json" -Body $BodyJSON -Method Post |
-	# 		Select-Object jsonrpc,@{Name="session";Expression={$_.Result}},id,@{Name="URL";Expression={$URL}}
-    # }	
 	
     if ($zabSession.session) {
 		$global:zabSessionParams = [ordered]@{jsonrpc=$zabSession.jsonrpc;session=$zabSession.session;id=$zabSession.id;url=$zabSession.URL}
@@ -259,7 +262,8 @@ Function Remove-ZabbixSession {
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL=($global:zabSessionParams.url)
     )
 
-	if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+	# if (!$psboundparameters.count -and !$global:zabSessionParams) {Get-Help -ex $PSCmdlet.MyInvocation.MyCommand.Name | out-string | Remove-EmptyLines; return}
+	if (!$psboundparameters.count -and !$global:zabSessionParams) {Write-Host "`nDisconnected from Zabbix Server!`n" -f red; return}
 
 	if (Get-ZabbixSession) {
 		$Body = @{

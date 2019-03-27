@@ -1,4 +1,12 @@
 # Changelog
+##### [0.2.0-alpha.7] - 2019-03-27
+##### Breaking change
+- cmdlets Get-ZabbixGroup and Set-ZabbixGroup were renamed to Get-ZabbixHostGroup and Set-ZabbixHostGroup
+
+##### Added
+- Validations to Connect-Zabbix, Disconnect-Zabbix
+- Custom URL path for case Zabbix frontend installed not in default https://zabbix.domain.net/zabbix, but in something like https://zabbix.domain.net or https://zabbix.domain.net/redir/zabbix 
+
 ##### [0.2.0-alpha.6] - 2019-03-13
 ##### Breaking change
 - cmdlets Get-ZabbixGroup and Set-ZabbixGroup were renamed to Get-ZabbixHostGroup and Set-ZabbixHostGroup

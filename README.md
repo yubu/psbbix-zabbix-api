@@ -58,7 +58,7 @@ Import-Module c:\temp\psbbix\psbbix.psm1
     Install-Module psbbix
 
 ### Installation from Powershell Gallery prerelease version
-#### 0.2.0-alpha.5 is available in the Gallery
+#### 0.2.0-alpha is available in the Gallery
     Install-Module psbbix -AllowPrerelease -AllowClobber
 
 ### Getting Started

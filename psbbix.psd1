@@ -112,7 +112,7 @@ PrivateData = @{
         ReleaseNotes = 'https://github.com/yubu/psbbix-zabbix-api/blob/master/CHANGELOG.md'
 
         # Prerelease information
-        Prerelease = 'alpha6'
+        Prerelease = 'alpha7'
 
     } # End of PSData hashtable
 

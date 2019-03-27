@@ -132,7 +132,7 @@ Function New-ZabbixSession {
 		Connect-Zabbix -User admin -Password zabbix -IPAddress zabbix.domain.net
 		Connect to Zabbix server
 	.Example
-		Connect-Zabbix -IPAddress zabbix.domain.net -$URLCustomPath ""
+		Connect-Zabbix -IPAddress zabbix.domain.net -URLCustomPath ""
 		Connect to Zabbix server with custom frontend install https://zabbix.domain.net, instead of default https://zabbix.domain.net/zabbix
 	#>
     

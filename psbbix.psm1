@@ -559,16 +559,19 @@ Function Set-ZabbixHost {
 		Set HostGroups for the host(s) and enable it
 	.Example
 		Get-ZabbixHost | ? name -eq hostName | Set-ZabbixHost -removeTemplates -WhatIf
-		WhatIf on delete of all templates from the host
+		WhatIf on delete and clear of all templates from the host
 	.Example
 		Get-ZabbixHost | ? name -eq hostName | Set-ZabbixHost -removeTemplates
-		Remove all linked templates from the host
+		Remove and clear all linked templates from the host
+	.Example
+		Get-ZabbixHost | ? name -eq hostName | Set-ZabbixHost -TemplateID (Get-ZabbixTemplate | ? name -eq "TemplateFromCurrentHost").templateid
+		Replace linked templates on the host with new ones (not clear the old ones)
 	.Example
 		Get-ZabbixHost | ? name -eq hostName | Set-ZabbixHost -removeTemplates -TemplateID (Get-ZabbixTemplate | ? name -eq "TemplateFromCurrentHost").templateid -WhatIf
-		WhatIf on remove linked template from host
+		WhatIf on remove and clear linked templates from the host
 	.Example
 		Get-ZabbixHost -HostName HostName | Set-ZabbixHost -removeTemplates -TemplateID (Get-ZabbixHost -HostName "HostName").parentTemplates.templateid
-		Unlink(remove) templates from the host (case sensitive)
+		Unlink(remove) and clear templates from the host (case sensitive)
 	.Example
 		$templateID=(Get-ZabbixTemplate -HostID (Get-ZabbixHost | ? name -match hostname).hostid).templateid
 		Store existing templateIDs
@@ -585,7 +588,7 @@ Function Set-ZabbixHost {
 		Link(add) templates to the host, according config of other host (case sensitive)
 	.Example
 		(1..9) | %{Get-ZabbixHost -HostName "Host0$_" | Set-ZabbixHost -TemplateID ((Get-ZabbixHost | ? name -match "sourcehost").parenttemplates.templateid)}
-		Link(add) templates to multiple hosts, according config of other host
+		Link(add) templates to multiple hosts, according config of the other host
 	#>	 
     
 	[CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]

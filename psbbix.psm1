@@ -188,9 +188,12 @@ Function New-ZabbixSession {
 		# [void]::$_
 		if ($_.exception -match "Unable to connect to the remote server") {write-host "`nNot connected! ERROR: $_`n" -f red; write-verbose $_.exception; return}
 		else { 
-			write-host "Seems SSL certificate is self signed. Trying with no SSL validation..." -f yellow
+			write-host "`nSeems SSL certificate is self signed. Trying with no SSL validation..." -f yellow
 			if (($PSVersionTable.PSEdition -eq "core") -and !($PSDefaultParameterValues.keys -eq "Invoke-RestMethod:SkipCertificateCheck")) {$PSDefaultParameterValues.Add("Invoke-RestMethod:SkipCertificateCheck",$true)}
-			else {[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}}
+			else {
+				write-host "`nWARNING: `nNo SSL validation setting in Windows Powershell is session wide.`nAs a result in this powershell session Invoke-Webrequest and Invoke-RestMethod may not work with regular websites: ex. iwr google.com`nUse new Powershell session for this purpose.`n" -f yellow
+				[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
+			}
 			$global:zabSession=Invoke-RestMethod ("$URL/api_jsonrpc.php") -ContentType "application/json" -Body $BodyJSON -Method Post |
 				Select-Object jsonrpc,@{Name="session";Expression={$_.Result}},id,@{Name="URL";Expression={$URL}}
 		}
@@ -233,7 +236,10 @@ Function Get-ZabbixSession {
     if (!($global:zabSession -and $global:zabSessionParams)) {
         write-host "`nDisconnected form Zabbix Server!`n" -f red; return
     }
-    elseif ($global:zabSession -and $global:zabSessionParams -and ($ZabbixVersion=Get-ZabbixVersion)) {
+    elseif ($global:zabSession -and $global:zabSessionParams -and !($ZabbixVersion=Get-ZabbixVersion)) {
+		write-host "`nZabbix session params are OK (use -verbose for details). Check whether Zabbix Server is online. In case of certificate error try new powershell session.`n" -f red; write-verbose "$($zabSession | select *)"; return	
+	}
+	elseif ($global:zabSession -and $global:zabSessionParams -and ($ZabbixVersion=Get-ZabbixVersion)) {
 		$zabSession | select *, @{n="ZabbixVer";e={$ZabbixVersion}}
     }
 	else {write-host "`nDisconnected form Zabbix Server!`n" -f red; return}
@@ -324,8 +330,11 @@ Function Get-ZabbixVersion {
 		$BodyJSON = ConvertTo-Json $Body
 		write-verbose $BodyJSON
 		
-		$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
-		if ($a.result) {return $a.result} else {$a.error}
+		try {
+			$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
+			if ($a.result) {return $a.result} else {$a.error}
+		}
+		catch {Write-Host "`nERROR: $_." -f red}
 	}
 }
 

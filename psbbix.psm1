@@ -585,10 +585,10 @@ Function Set-ZabbixHost {
 		Add new template to existing ones (not replace)
 	.Example
 		Get-ZabbixHost -HostName HostName | Set-ZabbixHost -TemplateID (Get-ZabbixHost -HostName SourceHost).parentTemplates.templateid
-		Link(add) templates to the host, according config of other host (case sensitive)
+		Link(replace existing) new templates to the host, according config of other host (case sensitive)
 	.Example
 		(1..9) | %{Get-ZabbixHost -HostName "Host0$_" | Set-ZabbixHost -TemplateID ((Get-ZabbixHost | ? name -match "sourcehost").parenttemplates.templateid)}
-		Link(add) templates to multiple hosts, according config of the other host
+		Link(replace existing) new templates to multiple hosts, according config of the other host
 	#>	 
     
 	[CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]
@@ -681,14 +681,14 @@ Function Set-ZabbixHost {
 		}
 		elseif ($removeTemplates -and !$TemplateID) {
 			if ([bool]$WhatIfPreference.IsPresent) {}
-			if ($PSCmdlet.ShouldProcess((($parentTemplates).name -join ", "),"Delete all linked templates from the host")) {  
+			if ($PSCmdlet.ShouldProcess((($parentTemplates).name -join ", "),"Unlink and clear templates from the host")) {  
 				$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
 				if ($a.result) {$a.result} else {$a.error}
 			}
 		}
 		elseif ($removeTemplates -and $TemplateID) {
 			if ([bool]$WhatIfPreference.IsPresent) {}
-			if ($PSCmdlet.ShouldProcess(($parentTemplates | ? templateid -match (($tmpl).templateid -join "|")).name,"Delete linked templates")) {  
+			if ($PSCmdlet.ShouldProcess(($parentTemplates | ? templateid -match (($tmpl).templateid -join "|")).name,"Unlink and clear templates")) {  
 				$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
 				if ($a.result) {$a.result} else {$a.error}
 			}

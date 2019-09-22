@@ -1,4 +1,8 @@
 # Changelog
+##### [0.2.1] - 2019-09-22
+##### Fixed
+ - Minor fixes
+ 
 ##### [0.2.0] - 2019-04-14
 ##### Breaking change
 - cmdlets Get-ZabbixGroup and Set-ZabbixGroup were renamed to Get-ZabbixHostGroup and Set-ZabbixHostGroup

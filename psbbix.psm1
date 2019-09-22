@@ -970,11 +970,10 @@ Function Remove-ZabbixHost {
 			params = @{
 				host = $HostName
 				# interfaces = $interfaces
-				interfaces = (Get-ZabbixHostInterface -HostID $hostid)
+				interfaces = (Get-ZabbixHostInterface -HostID $hostid | select * -ExcludeProperty hostid,interfaceid,bulk)
 				templates = ($templates | select templateid)
 				groups = ($groups | select groupid)
-				proxy_hostid = $ProxyHostID
-				httpTests = ($httpTests | select httptestid)
+				# proxy_hostid = $ProxyHostID
 				status = $Status
 			}
 			
@@ -982,6 +981,10 @@ Function Remove-ZabbixHost {
 			auth = $session
 			id = $id
 		}
+
+		# if ($IP) {$Body.params.interfaces = }
+		if ($httpTests) {$Body.params.httptests = ($httpTests | select httptestid)}
+		if ($ProxyHostID) {$Body.params.proxy_hostid = $ProxyHostID}
 
 		$BodyJSON = ConvertTo-Json $Body -Depth 3
 		write-verbose $BodyJSON
@@ -991,7 +994,7 @@ Function Remove-ZabbixHost {
 		if ($a.result) {
 			$a.result
 				write-verbose " --> Going to replace the IP address in cloned interfaces..."
-				Get-ZabbixHost -HostName $HostName | Get-ZabbixHostInterface | %{Set-ZabbixHostInterface -InterfaceID $_.interfaceid -IP $IP -Port $_.port -HostID $_.hostid -main $_.main}
+				Get-ZabbixHost -HostName $HostName | Get-ZabbixHostInterface | Set-ZabbixHostInterface -IP $IP
 		} else {$a.error}
 	}
 }
@@ -1616,9 +1619,13 @@ Function Set-ZabbixHostGroupRemoveHosts {
 		Get-ZabbixHostGroup | ? name -eq hostGroup | Set-ZabbixHostGroupRemoveHosts -HostID (Get-ZabbixHost | ? name -match hostsToRemove).hostid
 		Remove hosts from the host group 
 	.Example
+		Set-ZabbixHostGroupRemoveHosts -GroupID ( Get-ZabbixHostGroup | ? name -match "hostGroup-0[1-6]").groupid -HostID (Get-ZabbixHost | ? name -match "hostname-10[1-9]").hostid -hostName (Get-ZabbixHost | ? name -match "hostname-10[1-9]").name -verbose
+		Remove hosts from the host groups with extra verbosity and validation
+	.Example
 		Get-ZabbixHost | ? name -match hostsToRemove | Set-ZabbixHostGroupRemoveHosts -GroupID (Get-ZabbixHostGroup | ? name -match hostGroup).groupid
 		Get-ZabbixHostGroup -GroupID 25 | select -ExpandProperty hosts
-		1.Remove hosts from the host group 2.Validate the change
+		Get-ZabbixHostGroup | select groupid,name,hosts
+		1.Remove hosts from the host group 2.Validate the change 3.Validate the change
 	.Example 
 		Set-ZabbixHostGroupRemoveHosts -GroupID 25 -TemplateID (Get-ZabbixTemplate | ? name -match "template1|template2").templateid
 		Remove templates from host group
@@ -1635,6 +1642,7 @@ Function Set-ZabbixHostGroupRemoveHosts {
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$GroupID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$HostID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$TemplateID,
+		[Alias("host")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$HostName,
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$session=($global:zabSessionParams.session),
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string]$id=($global:zabSessionParams.id),
@@ -1653,8 +1661,8 @@ Function Set-ZabbixHostGroupRemoveHosts {
 			method = "hostgroup.massremove"
 			params = @{
 				groupids = @($GroupID)
-				hostids = @($HostID)
-				templateids = @($TemplateID)
+				# hostids = @($HostID)
+				# templateids = @($TemplateID)
 			}
 			
 			jsonrpc = $jsonrpc
@@ -1662,12 +1670,16 @@ Function Set-ZabbixHostGroupRemoveHosts {
 			auth = $session
 		}
 
+		if ($HostID) {$Body.params.hostids=@($HostID)}
+		if ($TemplateID) {$Body.params.templateids=@($TemplateID)}
+
 		$BodyJSON = ConvertTo-Json $Body
 		write-verbose $BodyJSON
 		
 		try {
 			if ([bool]$WhatIfPreference.IsPresent) {}
-			if ($PSCmdlet.ShouldProcess((@($HostID)+(@($TemplateID))),"Delete")) {  
+
+			if ($PSCmdlet.ShouldProcess((@($HostID)+@($hostName)+(@($TemplateID))),"Delete")) {  
 				$a = Invoke-RestMethod "$URL/api_jsonrpc.php" -ContentType "application/json" -Body $BodyJSON -Method Post
 				if ($a.result) {$a.result} else {$a.error}
 			}
@@ -1703,7 +1715,7 @@ Function Set-ZabbixHostGroupAddHosts {
 	[CmdletBinding()]
 	[Alias("szhgah")]
 	Param (
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$Name,
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$Name,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$GroupID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$HostID,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$TemplateID,
@@ -3462,6 +3474,12 @@ Function Get-ZabbixEvent {
 		Get-ZabbixEvent -TimeFrom (convertTo-epoch (get-date).addhours(-24)) | select @{n="Time UTC";e={convertfrom-epoch $_.clock}},@{n="Server";e={$_.hosts.name}},@{n="alerts";e={$_.alerts.subject[0]}}
 		Get events for last 24 hours. According UTC/GMT+0 time. TimeTill is now in UTC/GMT+0 time
 	.Example
+		Get-ZabbixProblem | Get-ZabbixEvent | ft -a
+		Get events
+	.Example
+		Get-ZabbixProblem | Get-ZabbixEvent | select @{n="clock(UTC+1)";e={(convertfrom-epoch $_.clock).addhours(1)}},* | ft -a 
+		Get events. Time in UTC+1 
+	.Example
 		Get-ZabbixEvent -TimeFrom (convertTo-epoch (get-date).addhours(-24)) -TimeTill (convertTo-epoch (get-date).addhours(0)) | select @{n="Time UTC";e={convertfrom-epoch $_.clock}},@{n="Server";e={$_.hosts.name}},@{n="alerts";e={$_.alerts.subject[0]}}
 		Get events for last 24 hours
 	.Example
@@ -3484,7 +3502,7 @@ Function Get-ZabbixEvent {
 		# Time until to display alerts. Default: till now. Time is in UTC/GMT
 		$TimeTill=(convertTo-epoch ((get-date).addhours(0)).ToUniversalTime()),
 		$HostID,
-		[array]$EventID,
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][array]$EventID,
 		[array] $SortBy="clock",
         # Possible values for trigger events: 0 - trigger; 1 - discovered host; 2 - discovered service; 3 - auto-registered host
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)]$source, 

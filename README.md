@@ -16,6 +16,7 @@ Powershell Module for Zabbix API
 - [Zabbix API Libraries](<http://zabbix.org/wiki/Docs/api/libraries>)
 - [Zabbix 2.4 API documentation](<https://www.zabbix.com/documentation/2.4/manual/api>)
 - [Zabbix 3.4 API documentation](<https://www.zabbix.com/documentation/3.4/manual/api>)
+- [Zabbix 4.2 API documentation](<https://www.zabbix.com/documentation/4.2/manual/api>)
 
 ### Warning:
 - Be careful. Especially with the mass delete and the mass update. 
@@ -75,6 +76,8 @@ Get-ZabbixHelp help
 gzh -list                                       # List module functions
 gzh -alias                                      # List module aliases
 gzh *                                           # Get all examples
+gzh host set                                    # Get (Zabbix)host related command with verb set == Set-ZabbixHost
+gzh hostgroup new                               # Get (Zabbix)hostgroup related command with verb new == New-ZabbixHostGroup
 gzh item -pattern "cassandra|entropy" 
 gzh alert -pattern "example 4"
 gzh graph -p path

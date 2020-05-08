@@ -1999,7 +1999,9 @@ Function New-ZabbixMaintenance {
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$jsonrpc=($global:zabSessionParams.jsonrpc),
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$session=($global:zabSessionParams.session),
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$id=($global:zabSessionParams.id),
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL=($global:zabSessionParams.url)
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$true)][string]$URL=($global:zabSessionParams.url),
+		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$False)][string[]]$Tags
+		
     )
     
 	process {
@@ -2070,6 +2072,19 @@ Function New-ZabbixMaintenance {
 				id = $id
 				auth = $session
 			}
+		}
+
+		if($Tags){
+			$formattedTags = Foreach ($tag in $Tags)
+            {
+                $split = $tag.split(':')
+                @{
+                    tag      = $split[0]
+                    operator = 0
+                    value    = $split[-1]
+                }
+			}
+			$Body.params.tags = $formattedTags
 		}
 		
 		$BodyJSON = ConvertTo-Json $Body -Depth 4

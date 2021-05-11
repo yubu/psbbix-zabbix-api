@@ -4060,7 +4060,7 @@ Function New-ZabbixUser {
 		[Alias("active")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$UserMediaActive,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$medias,
 		# Type of the user. Possible values: 1 - (default) Zabbix user; 2 - Zabbix admin; 3 - Zabbix super admin.
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$Type,
+		[Alias("roleid")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$Type,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$mediaTypes,
 		# Automatic refresh period. Accepts seconds and time unit with suffix. Default: 30s.
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Refresh,

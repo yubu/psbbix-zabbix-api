@@ -4348,12 +4348,10 @@ Function Set-ZabbixUser {
 				surname = $Surname
 				alias = $Alias
 				type = $Type
-				autologin = $Autologin
 				autologout = $Autologout
 				theme = $Theme
 				refresh = $Refresh
 				lang = $Lang
-				rows_per_page = $RowsPerPage
 				user_medias = @($medias)
 			}
 			
@@ -4363,18 +4361,25 @@ Function Set-ZabbixUser {
 		}
 		
 		# if ($Type) {$Body.params.type=$Type}
-		# if ($Autologin) {$Body.params.autologin=$Autologin}
+		if ($Autologin) {$Body.params.autologin=$Autologin}
 		# if ($Autologout) {$Body.params.autologout=$Autologout}
 		# if ($Theme) {$Body.params.theme=$Theme}
 		# if ($Refresh) {$Body.params.refresh=$Refresh}
-		# if ($RowsPerPage) {$Body.params.rows_per_page=$RowsPerPage}
+		if ($RowsPerPage) {$Body.params.rows_per_page=$RowsPerPage}
 
 		if ($UserDefaultURL) {$Body.params.url=$UserDefaultURL}	
 		if ($Passwd) {$Body.params.passwd=$Passwd}
 		if ($UserGroupID -or $usrgrp) {$Body.params.usrgrps=$usrgrp} else {$Body.params.usrgrps=@($usrgrps | select usrgrpid)}
 		
-		
-		
+		$body.Params
+		foreach( $Key in @($Body.params.Keys) ){
+			if( -not $Body.params[$Key] ) {
+				write-Verbose "Remove Empty param: $($key)"
+				# type [int] is also removed when value is not set "0" is considered no data
+				$Body.params.Remove($Key)
+			}
+		}
+		$body.Params
 		$BodyJSON = ConvertTo-Json $Body -Depth 3
 		write-verbose $BodyJSON
 		

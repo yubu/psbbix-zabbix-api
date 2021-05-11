@@ -4060,7 +4060,7 @@ Function New-ZabbixUser {
 		[Alias("active")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$UserMediaActive,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$medias,
 		# Type of the user. Possible values: 1 - (default) Zabbix user; 2 - Zabbix admin; 3 - Zabbix super admin.
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$Type,
+		[Alias("roleid")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][int]$Type,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$mediaTypes,
 		# Automatic refresh period. Accepts seconds and time unit with suffix. Default: 30s.
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Refresh,
@@ -4161,7 +4161,16 @@ Function New-ZabbixUser {
 			}
 		}
 
-		if ($Type) {$Body.params.type=$Type}
+		
+		if ($Type) {
+			$zabbixVersion = [version](Get-ZabbixVersion)
+			if ([version]::new($zabbixVersion.Major,$zabbixVersion.Minor,$zabbixVersion.Build) -ge [version]::new(5,2,0)) {
+				$Body.params.roleid=$Type
+			}
+			else {
+				$Body.params.type=$Type
+			}
+		}
 		if ($Autologin) {$Body.params.autologin=$Autologin}
 		if ($Autologout) {$Body.params.autologout=$Autologout}
 		if ($Theme) {$Body.params.theme=$Theme}
@@ -4257,7 +4266,7 @@ Function Set-ZabbixUser {
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Alias,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Passwd,
 		#user types: 1:Zabbix User,2:Zabbix Admin,3:Zabbix Super Admin 
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Type,
+		[Alias("roleid")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Type,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$usrgrps,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$medias,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$mediaid,
@@ -4338,13 +4347,10 @@ Function Set-ZabbixUser {
 				name = $Name
 				surname = $Surname
 				alias = $Alias
-				type = $Type
-				autologin = $Autologin
 				autologout = $Autologout
 				theme = $Theme
 				refresh = $Refresh
 				lang = $Lang
-				rows_per_page = $RowsPerPage
 				user_medias = @($medias)
 			}
 			
@@ -4353,19 +4359,33 @@ Function Set-ZabbixUser {
 			auth = $session
 		}
 		
-		# if ($Type) {$Body.params.type=$Type}
-		# if ($Autologin) {$Body.params.autologin=$Autologin}
+		if ($Type) {
+			$zabbixVersion = [version](Get-ZabbixVersion)
+			if ([version]::new($zabbixVersion.Major,$zabbixVersion.Minor,$zabbixVersion.Build) -ge [version]::new(5,2,0)) {
+				$Body.params.roleid=$Type
+			}
+			else {
+				$Body.params.type=$Type
+			}
+		}
+		if ($Autologin) {$Body.params.autologin=$Autologin}
 		# if ($Autologout) {$Body.params.autologout=$Autologout}
 		# if ($Theme) {$Body.params.theme=$Theme}
 		# if ($Refresh) {$Body.params.refresh=$Refresh}
-		# if ($RowsPerPage) {$Body.params.rows_per_page=$RowsPerPage}
+		if ($RowsPerPage) {$Body.params.rows_per_page=$RowsPerPage}
 
 		if ($UserDefaultURL) {$Body.params.url=$UserDefaultURL}	
 		if ($Passwd) {$Body.params.passwd=$Passwd}
 		if ($UserGroupID -or $usrgrp) {$Body.params.usrgrps=$usrgrp} else {$Body.params.usrgrps=@($usrgrps | select usrgrpid)}
 		
-		
-		
+		foreach( $Key in @($Body.params.Keys) ){
+			if( -not $Body.params[$Key] ) {
+				write-Verbose "Remove Empty param: $($key)"
+				# type [int] is also removed when value is not set "0" is considered no data
+				$Body.params.Remove($Key)
+			}
+		}
+
 		$BodyJSON = ConvertTo-Json $Body -Depth 3
 		write-verbose $BodyJSON
 		

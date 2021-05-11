@@ -4161,7 +4161,16 @@ Function New-ZabbixUser {
 			}
 		}
 
-		if ($Type) {$Body.params.type=$Type}
+		$zabbixVersion = [version](Get-ZabbixVersion)
+		
+		if ($Type) {
+			if ([version]::new($zabbixVersion.Major,$zabbixVersion.Minor,$zabbixVersion.Build) -ge [version]::new(5,2,0)) {
+				$Body.params.roleid=$Type
+			}
+			else {
+				$Body.params.type=$Type
+			}
+		}
 		if ($Autologin) {$Body.params.autologin=$Autologin}
 		if ($Autologout) {$Body.params.autologout=$Autologout}
 		if ($Theme) {$Body.params.theme=$Theme}

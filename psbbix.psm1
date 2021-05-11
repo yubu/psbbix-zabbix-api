@@ -4378,7 +4378,6 @@ Function Set-ZabbixUser {
 		if ($Passwd) {$Body.params.passwd=$Passwd}
 		if ($UserGroupID -or $usrgrp) {$Body.params.usrgrps=$usrgrp} else {$Body.params.usrgrps=@($usrgrps | select usrgrpid)}
 		
-		$body.Params
 		foreach( $Key in @($Body.params.Keys) ){
 			if( -not $Body.params[$Key] ) {
 				write-Verbose "Remove Empty param: $($key)"
@@ -4386,7 +4385,7 @@ Function Set-ZabbixUser {
 				$Body.params.Remove($Key)
 			}
 		}
-		$body.Params
+
 		$BodyJSON = ConvertTo-Json $Body -Depth 3
 		write-verbose $BodyJSON
 		

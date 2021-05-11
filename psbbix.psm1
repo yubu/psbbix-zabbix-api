@@ -4161,9 +4161,9 @@ Function New-ZabbixUser {
 			}
 		}
 
-		$zabbixVersion = [version](Get-ZabbixVersion)
 		
 		if ($Type) {
+			$zabbixVersion = [version](Get-ZabbixVersion)
 			if ([version]::new($zabbixVersion.Major,$zabbixVersion.Minor,$zabbixVersion.Build) -ge [version]::new(5,2,0)) {
 				$Body.params.roleid=$Type
 			}
@@ -4266,7 +4266,7 @@ Function Set-ZabbixUser {
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Alias,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Passwd,
 		#user types: 1:Zabbix User,2:Zabbix Admin,3:Zabbix Super Admin 
-		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Type,
+		[Alias("roleid")][Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$Type,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$usrgrps,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][array]$medias,
 		[Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)][string]$mediaid,
@@ -4347,7 +4347,6 @@ Function Set-ZabbixUser {
 				name = $Name
 				surname = $Surname
 				alias = $Alias
-				type = $Type
 				autologout = $Autologout
 				theme = $Theme
 				refresh = $Refresh
@@ -4360,7 +4359,15 @@ Function Set-ZabbixUser {
 			auth = $session
 		}
 		
-		# if ($Type) {$Body.params.type=$Type}
+		if ($Type) {
+			$zabbixVersion = [version](Get-ZabbixVersion)
+			if ([version]::new($zabbixVersion.Major,$zabbixVersion.Minor,$zabbixVersion.Build) -ge [version]::new(5,2,0)) {
+				$Body.params.roleid=$Type
+			}
+			else {
+				$Body.params.type=$Type
+			}
+		}
 		if ($Autologin) {$Body.params.autologin=$Autologin}
 		# if ($Autologout) {$Body.params.autologout=$Autologout}
 		# if ($Theme) {$Body.params.theme=$Theme}

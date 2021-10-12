@@ -481,6 +481,14 @@ Function Get-ZabbixHost {
 					"macro"
 					"value"
 				)
+				selectTags            = @(
+					"tag"
+					"value"
+				)
+				selectInheritedTags   = @(
+					"tag"
+					"value"
+				)
 				selectScreens = @(
 					"screenid"
 					"name"
@@ -2015,63 +2023,116 @@ Function New-ZabbixMaintenance {
 		if (!($GroupID -or $HostID)) {write-host "`nYou need to provide GroupID or HostID as parameter`n" -f red; return}
 		
 		if ($GroupID) {
-			$Body = @{
-				method = "maintenance.create"
-				params = @{
-					name = $MaintenanceName
-					description = $MaintenanceDescription
-					active_since = $ActiveSince
-					active_till = $ActiveTill
-					maintenance_type = $MaintenanceType
-					timeperiods = @(
-						@{
-							timeperiod_type = $TimeperiodType
-							start_date = $TimeperiodStartDate
-							period = $TimeperiodPeriod
-							
-							start_time = $TimeperiodStartTime
-							month = $TimeperiodMonth
-							dayofweek = $TimeperiodDayOfWeek
-							day = $TimeperiodDay
-						}
-					)
-					groupids = @($GroupID)
-				}
+            if ($TimePeriodType -eq 0) {
+			    $Body = @{
+				    method = "maintenance.create"
+				    params = @{
+					    name = $MaintenanceName
+					    description = $MaintenanceDescription
+					    active_since = $ActiveSince
+					    active_till = $ActiveTill
+					    maintenance_type = $MaintenanceType
+					    timeperiods = @(
+						    @{
+							    timeperiod_type = $TimeperiodType
+							    start_date = $TimeperiodStartDate
+							    period = $TimeperiodPeriod
+						    }
+					    )
+					    groupids = @($GroupID)
+				    }
 				
-				jsonrpc = $jsonrpc
-				id = $id
-				auth = $session
-			}
+				    jsonrpc = $jsonrpc
+				    id = $id
+				    auth = $session
+			    }
+            }
+            else {
+			    $Body = @{
+				    method = "maintenance.create"
+				    params = @{
+					    name = $MaintenanceName
+					    description = $MaintenanceDescription
+					    active_since = $ActiveSince
+					    active_till = $ActiveTill
+					    maintenance_type = $MaintenanceType
+					    timeperiods = @(
+						    @{
+							    timeperiod_type = $TimeperiodType
+							    start_date = $TimeperiodStartDate
+							    period = $TimeperiodPeriod
+							
+							    every = $TimeperiodEvery
+							    start_time = $TimeperiodStartTime
+							    month = $TimeperiodMonth
+							    dayofweek = $TimeperiodDayOfWeek
+							    day = $TimeperiodDay
+						    }
+					    )
+					    groupids = @($GroupID)
+				    }
+				
+				    jsonrpc = $jsonrpc
+				    id = $id
+				    auth = $session
+			    }
+            }
 		}
 		if ($HostID) {
-			$Body = @{
-				method = "maintenance.create"
-				params = @{
-					name = $MaintenanceName
-					description = $MaintenanceDescription
-					active_since = $ActiveSince
-					active_till = $ActiveTill
-					maintenance_type = $MaintenanceType
-					timeperiods = @(
-						@{
-							timeperiod_type = $TimeperiodType
-							start_date = $TimeperiodStartDate
-							period = $TimeperiodPeriod
-							
-							every = $TimeperiodEvery
-							start_time = $TimeperiodStartTime
-							month = $TimeperiodMonth
-							dayofweek = $TimeperiodDayOfWeek
-							day = $TimeperiodDay
-						}
-					)
-					hostids = @($HostID)
-				}
+            if ($TimePeriodType -eq 0) {
+			    $Body = @{
+				    method = "maintenance.create"
+				    params = @{
+					    name = $MaintenanceName
+					    description = $MaintenanceDescription
+					    active_since = $ActiveSince
+					    active_till = $ActiveTill
+					    maintenance_type = $MaintenanceType
+					    timeperiods = @(
+						    @{
+							    timeperiod_type = $TimeperiodType
+							    start_date = $TimeperiodStartDate
+							    period = $TimeperiodPeriod
+						    }
+					    )
+					    hostids = @($HostID)
+				    }
 				
-				jsonrpc = $jsonrpc
-				id = $id
-				auth = $session
-			}
+				    jsonrpc = $jsonrpc
+				    id = $id
+				    auth = $session
+			    }
+            }
+            else {
+			    $Body = @{
+				    method = "maintenance.create"
+				    params = @{
+					    name = $MaintenanceName
+					    description = $MaintenanceDescription
+					    active_since = $ActiveSince
+					    active_till = $ActiveTill
+					    maintenance_type = $MaintenanceType
+					    timeperiods = @(
+						    @{
+							    timeperiod_type = $TimeperiodType
+							    start_date = $TimeperiodStartDate
+							    period = $TimeperiodPeriod
+							
+							    every = $TimeperiodEvery
+							    start_time = $TimeperiodStartTime
+							    month = $TimeperiodMonth
+							    dayofweek = $TimeperiodDayOfWeek
+							    day = $TimeperiodDay
+						    }
+					    )
+					    hostids = @($HostID)
+				    }
+				
+				    jsonrpc = $jsonrpc
+				    id = $id
+				    auth = $session
+			    }
+            }
 		}
 
 		if($Tags){

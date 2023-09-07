@@ -444,6 +444,7 @@ Function Get-ZabbixHost {
 
 		$Body = @{
 			method = "host.get"
+			selectTags = "extend"
 			params = @{
 				output = "extend"
 				selectGroups = @(

@@ -3,8 +3,7 @@
 Powershell Module for Zabbix API
 
 ##### Compatibility
-- Tested with Zabbix 2.4
-- Tested with Zabbix 3.4 
+- Tested with Zabbix 6.0
 - Tested with Powershell 5.0+
 - Tested with Powershell Core 6.0+
 
@@ -14,9 +13,7 @@ Powershell Module for Zabbix API
 
 ##### Zabbix Docs:
 - [Zabbix API Libraries](<http://zabbix.org/wiki/Docs/api/libraries>)
-- [Zabbix 2.4 API documentation](<https://www.zabbix.com/documentation/2.4/manual/api>)
-- [Zabbix 3.4 API documentation](<https://www.zabbix.com/documentation/3.4/manual/api>)
-- [Zabbix 4.2 API documentation](<https://www.zabbix.com/documentation/4.2/manual/api>)
+- [Zabbix 6.0 API documentation](<https://www.zabbix.com/documentation/6.0/en/manual/api>)
 
 ### Warning:
 - Be careful. Especially with the mass delete and the mass update. 
@@ -331,4 +328,94 @@ Get-ZabbixHttpTest -HttpTestName httpTest | Set-ZabbixHttpTest -status 1
 ```powershell
 Remove-ZabbixHttpTest -HttpTestID (Get-ZabbixTemplate | ? name -eq "Template Name" | Get-ZabbixHttpTest | ? name -match httpTests).httptestid
 ## delete http tests
+```
+
+##### Commands
+```powershell
+Clone-ZabbixHost
+Connect-Zabbix
+Delete-ZabbixApplication
+Delete-ZabbixHost
+Delete-ZabbixMediaType
+Delete-ZabbixTemplate
+Delete-ZabbixUserGroup
+Disconnect-Zabbix
+Export-ZabbixConfig
+Get-ZabbixConnection
+Get-ZabbixGroup
+Import-ZabbixConfig
+Set-ZabbixGroup
+convertFrom-epoch
+convertTo-epoch
+Copy-ZabbixHost
+Export-ZabbixConfiguration
+Get-ZabbixAction
+Get-ZabbixAlert
+Get-ZabbixApplication
+Get-ZabbixDBSize
+Get-ZabbixEvent
+Get-ZabbixGraph
+Get-ZabbixHelp
+Get-ZabbixHistory
+Get-ZabbixHost
+Get-ZabbixHostGroup
+Get-ZabbixHostInterface
+Get-ZabbixHostInventory
+Get-ZabbixHttpTest
+Get-ZabbixItem
+Get-ZabbixMaintenance
+Get-ZabbixMediaType
+Get-ZabbixProblem
+Get-ZabbixScreen
+Get-ZabbixSession
+Get-ZabbixTemplate
+Get-ZabbixTrigger
+Get-ZabbixUser
+Get-ZabbixUserGroup
+Get-ZabbixVersion
+Import-ZabbixConfiguration
+New-ZabbixApplication
+New-ZabbixHost
+New-ZabbixHostGroup
+New-ZabbixHostInterface
+New-ZabbixHttpTest
+New-ZabbixMaintenance
+New-ZabbixMediaType
+New-ZabbixSession
+New-ZabbixTemplate
+New-ZabbixTrigger
+New-ZabbixUser
+New-ZabbixUserGroup
+Remove-EmptyLines
+Remove-ZabbixApplication
+Remove-ZabbixHost
+Remove-ZabbixHostGroup
+Remove-ZabbixHostInterface
+Remove-ZabbixHttpTest
+Remove-ZabbixItem
+Remove-ZabbixMaintenance
+Remove-ZabbixMediaType
+Remove-ZabbixSession
+Remove-ZabbixTemplate
+Remove-ZabbixUser
+Remove-ZabbixUserGroup
+Save-ZabbixGraph
+Set-ZabbixAction
+Set-ZabbixApplication
+Set-ZabbixEvent
+Set-ZabbixHost
+Set-ZabbixHostGroup
+Set-ZabbixHostGroupAddHosts
+Set-ZabbixHostGroupRemoveHosts
+Set-ZabbixHostInterface
+Set-ZabbixHostInventory
+Set-ZabbixHttpTest
+Set-ZabbixItem
+Set-ZabbixMaintenance
+Set-ZabbixMediaType
+Set-ZabbixTemplate
+Set-ZabbixTrigger
+Set-ZabbixUser
+Set-ZabbixUserGroup
+Write-MissingParamsMessage
 ```
